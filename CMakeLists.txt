@@ -19,5 +19,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -pthread -std=c++0x -std=c++14 -fexceptions")
 
+find_package(Eigen3 REQUIRED)
 
+include_directories(
+        ${EIGEN3_INCLUDE_DIR}
+)
 add_executable(sim_plane main.cpp)
