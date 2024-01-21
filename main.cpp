@@ -12,18 +12,14 @@
 
 #include <Eigen/Dense>
 
-using namespace std;
-typedef Eigen::Vector3d V3D;
-typedef Eigen::Vector4d V4D;
-typedef Eigen::Matrix3d M3D;
-typedef Eigen::Vector3f V3F;
-typedef Eigen::Matrix3f M3F;
+#include "sim_plane.hpp"
+
 
 
 // noise experiment
 bool noise_en = true;
 float noise_mean = 0.0;
-float noise_stddev = 0.2;//plane noise along normal
+float noise_stddev = 0.0;//plane noise along normal
 double plane_width = 20.0;
 double lidar_width = plane_width * 3.0;
 
@@ -34,16 +30,6 @@ double normal_per = 0.05;
 V3D normal;
 double d;
 V3D b1, b2;
-
-void printV(const V3D & v, const string & s)
-{
-    cout << s << ":\n" << v.transpose() <<endl;
-}
-
-void printM(const M3D & m, const string & s)
-{
-    cout << s << ":\n" << m <<endl;
-}
 
 void generatePlane()
 {
@@ -84,30 +70,6 @@ void generateCloudOnPlane(vector<V3D>& cloud, int n = 50)
 //        printV(cloud[i], "point");
     }
 }
-
-void saveCloud(const vector<V4D> & cloud, string& file)
-{
-    printf("cloud file: %s\n", file.c_str());
-    ofstream of(file);
-    if (of.is_open())
-    {
-        of.setf(ios::fixed, ios::floatfield);
-        of.precision(6);
-        for (int i = 0; i < (int)cloud.size(); ++i) {
-            of<< cloud[i](0) << " " << cloud[i](1) << " " << cloud[i](2) << " " << cloud[i](3) << endl;
-        }
-        of.close();
-    }
-}
-
-void saveCloud(const vector<vector<V4D>> & cloud_per_lidar, string& file)
-{
-    for (int i = 0; i < (int)cloud_per_lidar.size(); ++i) {
-        string file_name =  file + "_" + to_string(i) + ".txt";
-        saveCloud(cloud_per_lidar[i], file_name);
-    }
-}
-
 
 void generateLidar(vector<V3D>& lidars, int n = 30)
 {
@@ -163,7 +125,7 @@ void cloud2lidar(vector<V4D>& cloud, vector<V4D>& lidars, vector<vector<V4D>> & 
         V3D b1_tmp, b2_tmp;
         findLocalTangentBases(normal_tmp, b1_tmp, b2_tmp);
 
-        cloud_per_lidar[i].push_back(lidars[i]);
+//        cloud_per_lidar[i].push_back(lidars[i]);
 
         for (int j = 0; j < points_per_lidar; ++j) {
             double xyz1 = gaussian_plane(generator);
@@ -192,9 +154,11 @@ int main(int argc, char** argv) {
 //    vector<V3D> lidars;
 //    generateLidar(lidars, 10);
 
+    int num_points_per_lidar = 40;
+    int num_lidar = 10;
     vector<V4D> cloud, lidars;
     vector<vector<V4D>> cloud_per_lidar;
-    cloud2lidar(cloud, lidars, cloud_per_lidar, 40, 10);
+    cloud2lidar(cloud, lidars, cloud_per_lidar, num_points_per_lidar, num_lidar);
 
     string file("/tmp/cloud.txt");
     saveCloud(cloud, file);
@@ -208,4 +172,15 @@ int main(int argc, char** argv) {
 
     string file_cloud_lidar("/tmp/cloud_lidar");
     saveCloud(cloud_per_lidar, file_cloud_lidar);
+
+    // do PCA per lidar
+    vector<M3D> eigen_vectors(num_lidar);
+    vector<V3D> eigen_values(num_lidar);
+    for (int i = 0; i < num_lidar; ++i) {
+        PCA(cloud_per_lidar[i], eigen_vectors[i], eigen_values[i]);
+        double theta = diff_normal(normal, eigen_vectors[i].col(0));
+        printf("lidar #%d normal diff: %f deg\n\n", i, theta / M_PI * 180.0);
+    }
+
+
 }
