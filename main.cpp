@@ -41,7 +41,7 @@ V3D normal;
 double d;
 V3D b1, b2;
 
-string cfg_file("./cfg.ini");
+string cfg_file("/home/hk/CLionProjects/Sim_plane/cfg.ini");
 //boost::filesystem::path cfg("./cfg.ini");
 void generatePlane()
 {
@@ -211,39 +211,34 @@ void cloud2lidarWithRangeAndBearing(vector<V4D>& cloud, vector<V4D>& lidars, vec
 
 void readParams()
 {
-    char buff[250];
-    getcwd(buff, 250);
-    string flie(buff);
-    cout << flie << endl;
-    flie  = flie + "../cfg.ini";
+//    char buff[250];
+//    getcwd(buff, 250);
+//    string flie(buff);
+//    cout << flie << endl;
+//    flie  = flie + "../cfg.ini";
 
     boost::property_tree::ptree m_pt, tag_settting;
     try {
-        boost::property_tree::read_ini(flie, m_pt);
+        boost::property_tree::read_ini(cfg_file, m_pt);
     }
     catch (exception e) {
         cout << "open cfg file failed." << endl;
     }
+    tag_settting = m_pt.get_child("sim_plane");
+    noise_mean = tag_settting.get<double>("noise_mean", 0.0);
+    noise_stddev = tag_settting.get<double>("noise_stddev", 0.0);
+    plane_width = tag_settting.get<double>("plane_width", 0.0);
 
-//    tag_settting = m_pt.get_child("sim_plane");
-//    noise_mean = tag_settting.get<double>("noise_mean", 0.0);
-//    cout << "noise_mean " << noise_mean <<  endl;
-//
-//    tag_settting = m_pt.get_child("sim_plane");
-//    noise_mean = tag_settting.get<double>("noise_mean", 0.0);
-//    noise_stddev = tag_settting.get<double>("noise_stddev", 0.0);
-//    plane_width = tag_settting.get<double>("plane_width", 0.0);
-//
-//    normal_pert = tag_settting.get<double>("normal_pert", 0.0);
-//    range_stddev = tag_settting.get<double>("range_stddev", 0.0);
-//    bearing_stddev_deg = tag_settting.get<double>("bearing_stddev_deg", 0.0);
-//
-//    num_lidar = tag_settting.get<int>("num_lidar", 0);
-//    num_points_per_lidar = tag_settting.get<int>("num_points_per_lidar", 0.0);
-//
-//
-//    lidar_width = plane_width * 3.0;
-//    bearing_stddev = DEG2RAD(bearing_stddev_deg);
+    normal_pert = tag_settting.get<double>("normal_pert", 0.0);
+    range_stddev = tag_settting.get<double>("range_stddev", 0.0);
+    bearing_stddev_deg = tag_settting.get<double>("bearing_stddev_deg", 0.0);
+
+    num_lidar = tag_settting.get<int>("num_lidar", 0);
+    num_points_per_lidar = tag_settting.get<int>("num_points_per_lidar", 0.0);
+
+
+    lidar_width = plane_width * 3.0;
+    bearing_stddev = DEG2RAD(bearing_stddev_deg);
 }
 
 int main(int argc, char** argv) {
