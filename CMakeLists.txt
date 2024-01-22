@@ -20,8 +20,12 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -pthread -std=c++0x -std=c++14 -fexceptions")
 
 find_package(Eigen3 REQUIRED)
+#find_package(Boost REQUIRED COMPONENTS system)
 
 include_directories(
         ${EIGEN3_INCLUDE_DIR}
 )
 add_executable(sim_plane main.cpp)
+target_link_libraries(sim_plane
+#        ${Boost_LIBRARIES}
+)

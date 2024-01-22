@@ -12,30 +12,37 @@
 
 #include <Eigen/Dense>
 
+#include <boost/property_tree/ptree.hpp>
+#include <boost/property_tree/ini_parser.hpp>
+//#include <boost/filesystem.hpp>
+#include <unistd.h>
+
+
 #include "sim_plane.hpp"
 
 // noise experiment
 bool noise_en = true;
 float noise_mean = 0.0;
-float noise_stddev = 0.00;//plane noise along normal
+float noise_stddev = 0.04;//plane noise along normal
 double plane_width = 20.0;
 double lidar_width = plane_width * 3.0;
 
 // normal pertubation (rad noise for every lidar pose)
-double normal_per = 0.02; //std
-double range_stddev = 0.04;
-double bearing_stddev_deg = 0.1;
+double normal_pert = 0.00; //std
+double range_stddev = 0.00;
+double bearing_stddev_deg = 0.0;
 double bearing_stddev = DEG2RAD(bearing_stddev_deg);
 
 int num_lidar = 10;
 int num_points_per_lidar = 40;
-
 
 //plane parameters
 V3D normal;
 double d;
 V3D b1, b2;
 
+string cfg_file("./cfg.ini");
+//boost::filesystem::path cfg("./cfg.ini");
 void generatePlane()
 {
     std::normal_distribution<double> gaussian_noise(0.0, 1.0);
@@ -52,7 +59,7 @@ void perturbNormal(V3D & normal_input)
 {
     unsigned seed = std::chrono::steady_clock::now().time_since_epoch().count();
     std::default_random_engine generator(seed);
-    std::normal_distribution<double> gaussian_normal(0.0, normal_per); //normal
+    std::normal_distribution<double> gaussian_normal(0.0, normal_pert); //normal
 
     normal_input(0) += gaussian_normal(generator);
     normal_input(1) += gaussian_normal(generator);
@@ -101,21 +108,20 @@ void generateCloudOnPlane(const V3D & normal_input, vector<V3D>& cloud)
     }
 }
 
-void generateCloudOnPlaneWithRangeBearing(const V3D & lidar, const V3D & normal_input, vector<V3D>& cloud, int n = 50)
+void generateCloudOnPlaneWithRangeBearing(const V3D & lidar, const V3D & normal_input, vector<V3D>& cloud)
 {
     std::normal_distribution<double> gaussian_plane(0.0, plane_width); //plane
     unsigned seed = std::chrono::steady_clock::now().time_since_epoch().count();
     std::default_random_engine generator(seed);
 
-    std::normal_distribution<double> gaussian_noise(0.0, noise_stddev); //plane
     std::normal_distribution<double> range_noise(0.0, range_stddev); //range
     std::normal_distribution<double> bearing_noise(0.0, bearing_stddev); //bearing
 
     V3D b1_tmp, b2_tmp;
     findLocalTangentBases(normal_input, b1_tmp, b2_tmp);
 
-    cloud.resize(n);
-    for (int i = 0; i < n; ++i) {
+    cloud.resize(num_points_per_lidar);
+    for (int i = 0; i < num_points_per_lidar; ++i) {
         double xyz1 = gaussian_plane(generator);
         double xyz2 = gaussian_plane(generator);
         V3D pi = b1_tmp * xyz1 + b2_tmp * xyz2; // point exactly on the plane
@@ -143,7 +149,6 @@ void generateLidar(vector<V3D>& lidars)
     unsigned seed = std::chrono::steady_clock::now().time_since_epoch().count();
     std::default_random_engine generator(seed);
 
-//    std::normal_distribution<double> gaussian_noise(0.0, noise_stddev); //plane
     for (int i = 0; i < num_lidar; ++i) {
         double xyz1 = gaussian_lidar(generator);
         double xyz2 = gaussian_lidar(generator);
@@ -152,22 +157,9 @@ void generateLidar(vector<V3D>& lidars)
     }
 }
 
-void cloud2lidar(vector<V4D>& cloud, vector<V4D>& lidars, vector<vector<V4D>> & cloud_per_lidar)
+void recordLidarID(const vector<V3D> & lidars_tmp, const vector<vector<V3D>> cloud_per_lidar_tmp,
+                   vector<V4D>& cloud, vector<V4D>& lidars, vector<vector<V4D>> & cloud_per_lidar)
 {
-    vector<V3D> lidars_tmp;
-    generateLidar(lidars_tmp);
-//    cout << "generateLidar" << endl;
-
-    vector<V3D> normals_tmp;
-    generatePerturbedNormal(normals_tmp);
-//    cout << "generatePerturbedNormal" << endl;
-
-    vector<vector<V3D>> cloud_per_lidar_tmp(num_lidar);
-    for (int i = 0; i < num_lidar; ++i) {
-        generateCloudOnPlane(normals_tmp[i], cloud_per_lidar_tmp[i]);
-    }
-//    cout << "generateCloudOnPlane" << endl;
-
     cloud.clear();
     cloud_per_lidar.resize(num_lidar);
     lidars.resize(num_lidar);
@@ -183,11 +175,83 @@ void cloud2lidar(vector<V4D>& cloud, vector<V4D>& lidars, vector<vector<V4D>> & 
         }
         cloud.insert(cloud.end(), cloud_i.begin(), cloud_i.end());
     }
-//    cout << "record" << endl;
+}
+
+void cloud2lidar(vector<V4D>& cloud, vector<V4D>& lidars, vector<vector<V4D>> & cloud_per_lidar)
+{
+    vector<V3D> lidars_tmp;
+    generateLidar(lidars_tmp);
+
+    vector<V3D> normals_tmp;
+    generatePerturbedNormal(normals_tmp);
+
+    vector<vector<V3D>> cloud_per_lidar_tmp(num_lidar);
+    for (int i = 0; i < num_lidar; ++i) {
+        generateCloudOnPlane(normals_tmp[i], cloud_per_lidar_tmp[i]);
+    }
+
+    recordLidarID(lidars_tmp, cloud_per_lidar_tmp, cloud, lidars, cloud_per_lidar);
+}
+
+void cloud2lidarWithRangeAndBearing(vector<V4D>& cloud, vector<V4D>& lidars, vector<vector<V4D>> & cloud_per_lidar)
+{
+    vector<V3D> lidars_tmp;
+    generateLidar(lidars_tmp);
+
+    vector<V3D> normals_tmp;
+    generatePerturbedNormal(normals_tmp);
+
+    vector<vector<V3D>> cloud_per_lidar_tmp(num_lidar);
+    for (int i = 0; i < num_lidar; ++i) {
+        generateCloudOnPlaneWithRangeBearing(lidars_tmp[i], normals_tmp[i], cloud_per_lidar_tmp[i]);
+    }
+
+    recordLidarID(lidars_tmp, cloud_per_lidar_tmp, cloud, lidars, cloud_per_lidar);
+}
+
+void readParams()
+{
+    char buff[250];
+    getcwd(buff, 250);
+    string flie(buff);
+    cout << flie << endl;
+    flie  = flie + "../cfg.ini";
+
+    boost::property_tree::ptree m_pt, tag_settting;
+    try {
+        boost::property_tree::read_ini(flie, m_pt);
+    }
+    catch (exception e) {
+        cout << "open cfg file failed." << endl;
+    }
+
+//    tag_settting = m_pt.get_child("sim_plane");
+//    noise_mean = tag_settting.get<double>("noise_mean", 0.0);
+//    cout << "noise_mean " << noise_mean <<  endl;
+//
+//    tag_settting = m_pt.get_child("sim_plane");
+//    noise_mean = tag_settting.get<double>("noise_mean", 0.0);
+//    noise_stddev = tag_settting.get<double>("noise_stddev", 0.0);
+//    plane_width = tag_settting.get<double>("plane_width", 0.0);
+//
+//    normal_pert = tag_settting.get<double>("normal_pert", 0.0);
+//    range_stddev = tag_settting.get<double>("range_stddev", 0.0);
+//    bearing_stddev_deg = tag_settting.get<double>("bearing_stddev_deg", 0.0);
+//
+//    num_lidar = tag_settting.get<int>("num_lidar", 0);
+//    num_points_per_lidar = tag_settting.get<int>("num_points_per_lidar", 0.0);
+//
+//
+//    lidar_width = plane_width * 3.0;
+//    bearing_stddev = DEG2RAD(bearing_stddev_deg);
 }
 
 int main(int argc, char** argv) {
     cout << "hello world" << endl;
+//    cout << cfg << endl;
+
+
+    readParams();
 
     generatePlane();
     printV(normal, "normal");
@@ -202,7 +266,8 @@ int main(int argc, char** argv) {
 
     vector<V4D> cloud, lidars;
     vector<vector<V4D>> cloud_per_lidar;
-    cloud2lidar(cloud, lidars, cloud_per_lidar);
+//    cloud2lidar(cloud, lidars, cloud_per_lidar);
+    cloud2lidarWithRangeAndBearing(cloud, lidars, cloud_per_lidar);
 
     string file("/tmp/cloud.txt");
     saveCloud(cloud, file);
@@ -224,7 +289,7 @@ int main(int argc, char** argv) {
         PCA(cloud_per_lidar[i], eigen_vectors[i], eigen_values[i], controids[i]);
         double resudial = point2planeResidual(cloud_per_lidar[i],  controids[i], eigen_vectors[i].col(0));
         double theta = diff_normal(normal, eigen_vectors[i].col(0));
-        printf("lidar #%d normal diff: %f deg sum residual^2: %f\n\n", i, theta / M_PI * 180.0, resudial);
+        printf("lidar #%d normal diff= %f deg, sum residual^2: %f\n\n", i, theta / M_PI * 180.0, resudial);
     }
 
     M3D eigen_vectors_merged;
@@ -232,7 +297,7 @@ int main(int argc, char** argv) {
     PCA(cloud, eigen_vectors_merged, eigen_values_merged, controid_merged);
     double resudial_merged = point2planeResidual(cloud,  controid_merged, eigen_vectors_merged.col(0));
     double theta_merged = diff_normal(normal,eigen_vectors_merged.col(0));
-    printf("cloud merged normal diff: %f deg  sum residual^2: %f\n\n", theta_merged / M_PI * 180.0,
+    printf("cloud merged normal diff: %f deg, sum residual^2: %f\n\n", theta_merged / M_PI * 180.0,
            resudial_merged);
     
     
