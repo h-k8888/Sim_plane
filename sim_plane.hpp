@@ -17,6 +17,10 @@
 
 #include "IKFoM_toolkit/esekfom/esekfom.hpp"
 
+#ifndef DEG2RAD
+#define DEG2RAD(x) ((x)*0.017453293)
+#endif
+
 //typedef MTK::vect<3, double> vect3;
 typedef MTK::SO3<double> SO3;
 //typedef MTK::S2<double, 98090, 10000, 1> S2;
@@ -55,11 +59,11 @@ void printM(const M3D & m, const string & s)
 }
 
 // PCA
-void PCA(const vector<V3D>& points, M3D & eigen_vectors, V3D & eigen_values)
+void PCA(const vector<V3D>& points, M3D & eigen_vectors, V3D & eigen_values, V3D & center)
 {
 //    plane_cov = Eigen::Matrix<double, 6, 6>::Zero();
     M3D covariance = Eigen::Matrix3d::Zero();
-    V3D center = Eigen::Vector3d::Zero();
+    center = Eigen::Vector3d::Zero();
     V3D normal = Eigen::Vector3d::Zero();
 
     int points_size = points.size();
@@ -84,13 +88,13 @@ void PCA(const vector<V3D>& points, M3D & eigen_vectors, V3D & eigen_values)
     printV(eigen_normal, "PCA normal");
 }
 
-void PCA(const vector<V4D>& points, M3D & eigen_vectors, V3D & eigen_values)
+void PCA(const vector<V4D>& points, M3D & eigen_vectors, V3D & eigen_values, V3D & center)
 {
     vector<V3D> cloud(points.size());
     for (int i = 0; i < points.size(); ++i) {
         cloud[i] = points[i].head(3);
     }
-    PCA(cloud, eigen_vectors, eigen_values);
+    PCA(cloud, eigen_vectors, eigen_values, center);
 }
 
 
@@ -139,6 +143,16 @@ double diff_normal(const V3D & n1, const V3D & n2)
     return theta;
 }
 
+
+double point2planeResidual(const vector<V4D> & points, const V3D & centroid, const V3D & normal)
+{
+    double sum_dist2 = 0;
+    for (int i = 0; i < points.size(); ++i) {
+        double dist = normal.dot(points[i].head(3) - centroid);
+        sum_dist2 += dist * dist;
+    }
+    return sum_dist2;
+}
 
 
 #endif //SIM_PLANE_SIM_PLANE_H

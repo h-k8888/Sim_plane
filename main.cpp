@@ -14,17 +14,22 @@
 
 #include "sim_plane.hpp"
 
-
-
 // noise experiment
 bool noise_en = true;
 float noise_mean = 0.0;
-float noise_stddev = 0.0;//plane noise along normal
+float noise_stddev = 0.00;//plane noise along normal
 double plane_width = 20.0;
 double lidar_width = plane_width * 3.0;
 
-// normal pertubation
-double normal_per = 0.05;
+// normal pertubation (rad noise for every lidar pose)
+double normal_per = 0.02; //std
+double range_stddev = 0.04;
+double bearing_stddev_deg = 0.1;
+double bearing_stddev = DEG2RAD(bearing_stddev_deg);
+
+int num_lidar = 10;
+int num_points_per_lidar = 40;
+
 
 //plane parameters
 V3D normal;
@@ -43,6 +48,28 @@ void generatePlane()
     d =  gaussian_noise_1(generator);
 }
 
+void perturbNormal(V3D & normal_input)
+{
+    unsigned seed = std::chrono::steady_clock::now().time_since_epoch().count();
+    std::default_random_engine generator(seed);
+    std::normal_distribution<double> gaussian_normal(0.0, normal_per); //normal
+
+    normal_input(0) += gaussian_normal(generator);
+    normal_input(1) += gaussian_normal(generator);
+    normal_input(2) += gaussian_normal(generator);
+    normal_input.normalize();
+}
+
+void generatePerturbedNormal(vector<V3D> & normals)
+{
+    normals.resize(num_lidar);
+    for (V3D & n : normals) {
+        n = normal;
+        perturbNormal(n);
+    }
+}
+
+
 // dir must be a unit vector
 void findLocalTangentBases(const V3D& dir, V3D & base1, V3D & base2)
 {
@@ -55,31 +82,69 @@ void findLocalTangentBases(const V3D& dir, V3D & base1, V3D & base2)
     base2.normalize();
 }
 
-void generateCloudOnPlane(vector<V3D>& cloud, int n = 50)
+void generateCloudOnPlane(const V3D & normal_input, vector<V3D>& cloud)
 {
-    cloud.resize(n);
     std::normal_distribution<double> gaussian_plane(0.0, plane_width); //plane
     unsigned seed = std::chrono::steady_clock::now().time_since_epoch().count();
     std::default_random_engine generator(seed);
 
     std::normal_distribution<double> gaussian_noise(0.0, noise_stddev); //plane
-    for (int i = 0; i < n; ++i) {
+
+    V3D b1_tmp, b2_tmp;
+    findLocalTangentBases(normal_input, b1_tmp, b2_tmp);
+
+    cloud.resize(num_points_per_lidar);
+    for (int i = 0; i < num_points_per_lidar; ++i) {
         double xyz1 = gaussian_plane(generator);
         double xyz2 = gaussian_plane(generator);
-        cloud[i] << b1 * xyz1 + b2 * xyz2 + normal * gaussian_noise(generator);
-//        printV(cloud[i], "point");
+        cloud[i] << b1_tmp * xyz1 + b2_tmp * xyz2 + normal_input * gaussian_noise(generator);
     }
 }
 
-void generateLidar(vector<V3D>& lidars, int n = 30)
+void generateCloudOnPlaneWithRangeBearing(const V3D & lidar, const V3D & normal_input, vector<V3D>& cloud, int n = 50)
 {
-    lidars.resize(n);
+    std::normal_distribution<double> gaussian_plane(0.0, plane_width); //plane
+    unsigned seed = std::chrono::steady_clock::now().time_since_epoch().count();
+    std::default_random_engine generator(seed);
+
+    std::normal_distribution<double> gaussian_noise(0.0, noise_stddev); //plane
+    std::normal_distribution<double> range_noise(0.0, range_stddev); //range
+    std::normal_distribution<double> bearing_noise(0.0, bearing_stddev); //bearing
+
+    V3D b1_tmp, b2_tmp;
+    findLocalTangentBases(normal_input, b1_tmp, b2_tmp);
+
+    cloud.resize(n);
+    for (int i = 0; i < n; ++i) {
+        double xyz1 = gaussian_plane(generator);
+        double xyz2 = gaussian_plane(generator);
+        V3D pi = b1_tmp * xyz1 + b2_tmp * xyz2; // point exactly on the plane
+
+        V3D ray = pi - lidar;
+        double p2lidar = ray.norm();
+        ray.normalize();
+        V3D br1, br2; // local tangent space bases
+        findLocalTangentBases(ray, br1, br2);
+        // range, bearing
+        double range_offset = range_noise(generator);
+        double br1_offset = bearing_noise(generator);
+        double br2_offset = bearing_noise(generator);
+
+        pi += range_offset * ray + br1 * br1_offset + br2 * br2_offset;
+        cloud[i] = pi;
+//        cloud[i] << b1_tmp * xyz1 + b2_tmp * xyz2 + normal_input * gaussian_noise(generator);
+    }
+}
+
+void generateLidar(vector<V3D>& lidars)
+{
+    lidars.resize(num_lidar);
     std::normal_distribution<double> gaussian_lidar(0.0, lidar_width); //plane
     unsigned seed = std::chrono::steady_clock::now().time_since_epoch().count();
     std::default_random_engine generator(seed);
 
 //    std::normal_distribution<double> gaussian_noise(0.0, noise_stddev); //plane
-    for (int i = 0; i < n; ++i) {
+    for (int i = 0; i < num_lidar; ++i) {
         double xyz1 = gaussian_lidar(generator);
         double xyz2 = gaussian_lidar(generator);
         lidars[i] << b1 * xyz1 + b2 * xyz2 + normal * abs(gaussian_lidar(generator));
@@ -87,56 +152,38 @@ void generateLidar(vector<V3D>& lidars, int n = 30)
     }
 }
 
-void cloud2lidar(vector<V4D>& cloud, vector<V4D>& lidars, vector<vector<V4D>> & cloud_per_lidar, int points_per_lidar, int num_lidar)
+void cloud2lidar(vector<V4D>& cloud, vector<V4D>& lidars, vector<vector<V4D>> & cloud_per_lidar)
 {
-    std::normal_distribution<double> gaussian_lidar(0.0, lidar_width); //lidar
-    unsigned seed = std::chrono::steady_clock::now().time_since_epoch().count();
-    std::default_random_engine generator(seed);
+    vector<V3D> lidars_tmp;
+    generateLidar(lidars_tmp);
+//    cout << "generateLidar" << endl;
 
-    std::normal_distribution<double> gaussian_normal(0.0, normal_per); //normal
+    vector<V3D> normals_tmp;
+    generatePerturbedNormal(normals_tmp);
+//    cout << "generatePerturbedNormal" << endl;
 
-    std::normal_distribution<double> gaussian_plane(0.0, plane_width); //plane width
-//    unsigned seed = std::chrono::steady_clock::now().time_since_epoch().count();
-//    std::default_random_engine generator(seed);
-
-    std::normal_distribution<double> gaussian_noise(0.0, noise_stddev); //plane noise along normal
-
-    lidars.resize(num_lidar);
-    cloud.resize(num_lidar * points_per_lidar);
-    cloud_per_lidar.resize(num_lidar);
-    int point_size = cloud.size() / lidars.size();
-    int point_id = 0;
+    vector<vector<V3D>> cloud_per_lidar_tmp(num_lidar);
     for (int i = 0; i < num_lidar; ++i) {
-        // plane pertubation
-        double xyz1 = gaussian_lidar(generator);
-        double xyz2 = gaussian_lidar(generator);
-        lidars[i].head(3) = b1 * xyz1 + b2 * xyz2 + normal * abs(gaussian_lidar(generator));
-        lidars[i](3) = i;
-
-        V3D normal_tmp = normal;
-        normal_tmp(0) += gaussian_normal(generator);
-        normal_tmp(1) += gaussian_normal(generator);
-        normal_tmp(2) += gaussian_normal(generator);
-        normal_tmp.normalize();
-
-        double d_tmp = d;
-        d_tmp += gaussian_normal(generator);
-
-        V3D b1_tmp, b2_tmp;
-        findLocalTangentBases(normal_tmp, b1_tmp, b2_tmp);
-
-//        cloud_per_lidar[i].push_back(lidars[i]);
-
-        for (int j = 0; j < points_per_lidar; ++j) {
-            double xyz1 = gaussian_plane(generator);
-            double xyz2 = gaussian_plane(generator);
-            cloud[point_id].head(3) = b1_tmp * xyz1 + b2_tmp * xyz2 + normal_tmp * gaussian_noise(generator);
-//            cloud[point_id].head(3) = b1 * xyz1 + b2 * xyz2;
-            cloud[point_id](3) = i;
-            cloud_per_lidar[i].push_back(cloud[point_id]);
-            point_id++;
-        }
+        generateCloudOnPlane(normals_tmp[i], cloud_per_lidar_tmp[i]);
     }
+//    cout << "generateCloudOnPlane" << endl;
+
+    cloud.clear();
+    cloud_per_lidar.resize(num_lidar);
+    lidars.resize(num_lidar);
+    for (int lidar_id = 0; lidar_id < num_lidar; ++lidar_id) {
+        lidars[lidar_id].head(3) = lidars_tmp[lidar_id];
+        lidars[lidar_id](3) = lidar_id;
+
+        vector<V4D> & cloud_i = cloud_per_lidar[lidar_id];
+        cloud_i.resize(num_points_per_lidar);
+        for (int j = 0; j < num_points_per_lidar; ++j) {
+            cloud_i[j].head(3) = cloud_per_lidar_tmp[lidar_id][j];
+            cloud_i[j](3) = lidar_id;
+        }
+        cloud.insert(cloud.end(), cloud_i.begin(), cloud_i.end());
+    }
+//    cout << "record" << endl;
 }
 
 int main(int argc, char** argv) {
@@ -145,7 +192,6 @@ int main(int argc, char** argv) {
     generatePlane();
     printV(normal, "normal");
     cout << "d = " << d << endl;
-
     findLocalTangentBases(normal, b1, b2);
 
 //    vector<V3D> cloud;
@@ -154,11 +200,9 @@ int main(int argc, char** argv) {
 //    vector<V3D> lidars;
 //    generateLidar(lidars, 10);
 
-    int num_points_per_lidar = 40;
-    int num_lidar = 10;
     vector<V4D> cloud, lidars;
     vector<vector<V4D>> cloud_per_lidar;
-    cloud2lidar(cloud, lidars, cloud_per_lidar, num_points_per_lidar, num_lidar);
+    cloud2lidar(cloud, lidars, cloud_per_lidar);
 
     string file("/tmp/cloud.txt");
     saveCloud(cloud, file);
@@ -175,12 +219,21 @@ int main(int argc, char** argv) {
 
     // do PCA per lidar
     vector<M3D> eigen_vectors(num_lidar);
-    vector<V3D> eigen_values(num_lidar);
+    vector<V3D> eigen_values(num_lidar), controids(num_lidar);
     for (int i = 0; i < num_lidar; ++i) {
-        PCA(cloud_per_lidar[i], eigen_vectors[i], eigen_values[i]);
+        PCA(cloud_per_lidar[i], eigen_vectors[i], eigen_values[i], controids[i]);
+        double resudial = point2planeResidual(cloud_per_lidar[i],  controids[i], eigen_vectors[i].col(0));
         double theta = diff_normal(normal, eigen_vectors[i].col(0));
-        printf("lidar #%d normal diff: %f deg\n\n", i, theta / M_PI * 180.0);
+        printf("lidar #%d normal diff: %f deg sum residual^2: %f\n\n", i, theta / M_PI * 180.0, resudial);
     }
 
-
+    M3D eigen_vectors_merged;
+    V3D eigen_values_merged, controid_merged;
+    PCA(cloud, eigen_vectors_merged, eigen_values_merged, controid_merged);
+    double resudial_merged = point2planeResidual(cloud,  controid_merged, eigen_vectors_merged.col(0));
+    double theta_merged = diff_normal(normal,eigen_vectors_merged.col(0));
+    printf("cloud merged normal diff: %f deg  sum residual^2: %f\n\n", theta_merged / M_PI * 180.0,
+           resudial_merged);
+    
+    
 }
