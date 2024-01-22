@@ -21,7 +21,7 @@
 #include "sim_plane.hpp"
 
 // noise experiment
-bool noise_en = true;
+int noise_type = 1;
 float noise_mean = 0.0;
 float noise_stddev = 0.04;//plane noise along normal
 double plane_width = 20.0;
@@ -211,12 +211,6 @@ void cloud2lidarWithRangeAndBearing(vector<V4D>& cloud, vector<V4D>& lidars, vec
 
 void readParams()
 {
-//    char buff[250];
-//    getcwd(buff, 250);
-//    string flie(buff);
-//    cout << flie << endl;
-//    flie  = flie + "../cfg.ini";
-
     boost::property_tree::ptree m_pt, tag_settting;
     try {
         boost::property_tree::read_ini(cfg_file, m_pt);
@@ -228,14 +222,19 @@ void readParams()
     noise_mean = tag_settting.get<double>("noise_mean", 0.0);
     noise_stddev = tag_settting.get<double>("noise_stddev", 0.0);
     plane_width = tag_settting.get<double>("plane_width", 0.0);
+    num_lidar = tag_settting.get<int>("num_lidar", 0);
+    num_points_per_lidar = tag_settting.get<int>("num_points_per_lidar", 0.0);
+    printf("noise_mean: %.3f\nnoise_stddev: %.3f\nplane_width %.3f\n"
+           "num_lidar %d\nnum_points_per_lidar %d\n", noise_mean, noise_stddev,
+           plane_width, num_lidar, num_points_per_lidar);
 
     normal_pert = tag_settting.get<double>("normal_pert", 0.0);
     range_stddev = tag_settting.get<double>("range_stddev", 0.0);
     bearing_stddev_deg = tag_settting.get<double>("bearing_stddev_deg", 0.0);
 
-    num_lidar = tag_settting.get<int>("num_lidar", 0);
-    num_points_per_lidar = tag_settting.get<int>("num_points_per_lidar", 0.0);
-
+    noise_type = tag_settting.get<int>("noise_type", 1);
+    printf("noise_type: %d\nnormal_pert: %.3f\nrange_stddev: %.3f\nbearing_stddev_deg: %.3f\n",
+           noise_type, normal_pert, range_stddev, bearing_stddev_deg);
 
     lidar_width = plane_width * 3.0;
     bearing_stddev = DEG2RAD(bearing_stddev_deg);
@@ -243,8 +242,6 @@ void readParams()
 
 int main(int argc, char** argv) {
     cout << "hello world" << endl;
-//    cout << cfg << endl;
-
 
     readParams();
 
@@ -261,8 +258,26 @@ int main(int argc, char** argv) {
 
     vector<V4D> cloud, lidars;
     vector<vector<V4D>> cloud_per_lidar;
-//    cloud2lidar(cloud, lidars, cloud_per_lidar);
-    cloud2lidarWithRangeAndBearing(cloud, lidars, cloud_per_lidar);
+    switch (noise_type) {
+        case 1:
+        {
+            printf("***noise: iostropic.***\n");
+            cloud2lidar(cloud, lidars, cloud_per_lidar);
+            break;
+        }
+        case 2:
+        {
+            printf("***noise: range and bearing.***\n");
+            cloud2lidarWithRangeAndBearing(cloud, lidars, cloud_per_lidar);
+            break;
+        }
+        case 3:
+        {
+            printf("***noise: range, bearing, invident and roughness.***\n");
+            break;
+        }
+    }
+
 
     string file("/tmp/cloud.txt");
     saveCloud(cloud, file);
