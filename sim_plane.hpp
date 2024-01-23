@@ -34,6 +34,19 @@ typedef Eigen::Matrix3d M3D;
 typedef Eigen::Vector3f V3F;
 typedef Eigen::Matrix3f M3F;
 
+extern int refine_maximum_iter;
+extern double incident_cov_max, incident_cov_scale, incident_cos_min, bearing_stddev;
+extern double range_stddev;
+// ray: unit vector
+double calcIncidentCovScale(const V3D & ray, const double & dist, const V3D& normal)
+{
+//    static double angle_rad = DEG2RAD(angle_cov);
+    double cos_incident = abs(normal.dot(ray));
+    cos_incident = max(cos_incident, incident_cos_min);
+    double sin_incident = sqrt(1 - cos_incident * cos_incident);
+    double sigma_a = dist * sin_incident / cos_incident * bearing_stddev; // range * tan(incident) * sigma_angle
+    return min(incident_cov_max, incident_cov_scale * sigma_a * sigma_a); // scale * sigma_a^2
+}
 
 // 3D point with covariance
 typedef struct pointWithCov {
@@ -46,6 +59,13 @@ typedef struct pointWithCov {
     double p2lidar;
     double roughness_cov; // ^2, isotropic cov in 3D space
     double tangent_cov; // ^2, isotropic cov in tangent space
+
+    void getCovValues(double & range_cov, double & tan_cov, const V3D & n) const
+    {
+        double incident_scale = calcIncidentCovScale(ray, p2lidar, n);
+        range_cov = range_stddev * range_stddev + roughness_cov + incident_scale;
+        tan_cov = tangent_cov;
+    }
 } pointWithCov;
 
 void printV(const V3D & v, const string & s)
@@ -155,4 +175,94 @@ double point2planeResidual(const vector<V4D> & points, const V3D & centroid, con
 }
 
 
+// dir must be a unit vector
+void findLocalTangentBases(const V3D& dir, V3D & base1, V3D & base2)
+{
+    // find base vector in the local tangent space
+    base1 = dir.cross(V3D(1.0, 0, 0));
+    if (dir(0) == 1.0)
+        base1 = dir.cross(V3D(0, 0, 1.0));
+    base1.normalize();
+    base2 = dir.cross(base1);
+    base2.normalize();
+}
+
+double threshold = 0.001;
+void refineNormalAndCenterDWithCov(const V3D& normal_input, const std::vector<pointWithCov> &points,
+                                   const V3D & center_input, V3D & normal_out, V3D & center_out)
+{
+    bool is_converge = true;
+    V3D normal = normal_input;
+    V3D center = center_input;
+    int i = -1;
+    for(; i < refine_maximum_iter; ++i)
+    {
+        // find base vector in the local tangent space
+        V3D bn1, bn2;
+        findLocalTangentBases(normal, bn1, bn2);
+
+        M3D NNt = normal * normal.transpose();
+        M3D JtJ = M3D::Zero();
+        V3D Jte = V3D::Zero();
+        for (int j = 0; j < points.size(); j++) {
+            const pointWithCov &pv = points[j];
+            // point to plane E dist^2
+            V3D c2p = pv.point - center;
+
+            double range_cov, tan_cov;
+            pv.getCovValues(range_cov, tan_cov, normal);
+            double range_var_inv = 1.0 / sqrt(range_cov); // 1 / sigma range
+            double tangent_var_inv = 1.0 / sqrt(tan_cov); // 1 / (range * sigma angle)
+
+            // construct V
+            const V3D &ray = pv.ray;
+            V3D br1, br2;
+            findLocalTangentBases(ray, br1, br2);
+            M3D A;
+            A.row(0) = range_var_inv * ray.transpose();
+            A.row(1) = tangent_var_inv * bn1.transpose();
+            A.row(2) = tangent_var_inv * bn2.transpose();
+            M3D Jw_i;
+//            double NtP = normal.transpose() * c2p;
+            Jw_i.col(0) = A * (bn1 * normal.transpose() + normal * bn1.transpose()) * c2p;
+            Jw_i.col(1) = A * (bn2 * normal.transpose() + normal * bn2.transpose()) * c2p;
+            Jw_i.col(2) = -A * normal;
+            V3D e_i = A * NNt * c2p;
+            JtJ += Jw_i.transpose() * Jw_i;
+
+            V3D Jte_i = Jw_i.transpose() * e_i;
+            Jte += Jte_i;
+//                cout << "Jw_i\n" << Jw_i << endl;
+//                cout << "Jte_i\n" << Jte_i.transpose() << endl;
+        }
+//            cout << "JtJ:\n" << JtJ << endl;
+//            cout << "JtJ inv:\n" << JtJ.inverse() << endl;
+//            cout << "Jte:\n" << Jte.transpose() << endl;
+
+        V3D d_w = -(JtJ).inverse() * Jte;
+//            ROS_INFO("delta_w [%f %f] delta_d [%f]", d_w(0), d_w(1), d_w(2));
+
+        V3D dn = d_w(0) * bn1 + d_w(1) * bn2; // diff normal
+        normal += dn;
+        normal.normalize();
+
+        center += normal * d_w(2);
+
+        for (int j = 0; j < 3; ++j) {
+            if (d_w(j) > threshold) {
+                is_converge = false;
+                break;
+            }
+        }
+
+        if (is_converge)
+            break;
+    }
+//        ROS_INFO("%d iter normal old [%f %f %f] new [%f %f %f]", i, normal_input(0), normal_input(1), normal_input(2),
+//                 normal(0), normal(1), normal(2));
+//        ROS_INFO("center old [%f %f %f] new [%f %f %f]", plane->center(0), plane->center(1), plane->center(2),
+//                 center(0), center(1), center(2));
+    normal_out = normal;
+    center_out = center;
+}
 #endif //SIM_PLANE_SIM_PLANE_H

@@ -40,13 +40,22 @@ double incident_max = 75.0; //degree
 double incident_cos_min = cos(incident_max / 180.0 * M_PI);
 double incident_cov_max, incident_cov_scale;
 
+int refine_maximum_iter;
+
 //plane parameters
 V3D normal;
 double d;
 V3D b1, b2;
 
 string cfg_file("/home/hk/CLionProjects/Sim_plane/cfg.ini");
-//boost::filesystem::path cfg("./cfg.ini");
+
+vector<V4D> cloud, lidars;
+vector<vector<V4D>> cloud_per_lidar;
+vector<double> mean_incidents;
+vector<V3D> normal_per_lidar;
+vector<vector<pointWithCov>> pointWithCov_per_lidar;
+vector<pointWithCov> pointWithCov_all;
+
 void generatePlane()
 {
     std::normal_distribution<double> gaussian_noise(0.0, 1.0);
@@ -80,19 +89,6 @@ void generatePerturbedNormal(vector<V3D> & normals)
     }
 }
 
-
-// dir must be a unit vector
-void findLocalTangentBases(const V3D& dir, V3D & base1, V3D & base2)
-{
-    // find base vector in the local tangent space
-    base1 = dir.cross(V3D(1.0, 0, 0));
-    if (dir(0) == 1.0)
-        base1 = dir.cross(V3D(0, 0, 1.0));
-    base1.normalize();
-    base2 = dir.cross(base1);
-    base2.normalize();
-}
-
 void generateCloudOnPlane(const V3D & lidar, const V3D & normal_input, vector<V3D>& cloud, double & incident_out)
 {
     std::normal_distribution<double> gaussian_plane(0.0, plane_width); //plane
@@ -122,17 +118,17 @@ void generateCloudOnPlane(const V3D & lidar, const V3D & normal_input, vector<V3
     incident_out = incident;
 }
 
-// ray: unit vector
-double calcIncidentCovScale(const V3D & ray, const double & dist, const V3D& normal)
-{
-//    static double angle_rad = DEG2RAD(angle_cov);
-    double cos_incident = abs(normal.dot(ray));
-    cos_incident = max(cos_incident, incident_cos_min);
-    double sin_incident = sqrt(1 - cos_incident * cos_incident);
-//    return dist * sin_incident / cos_incident * bearing_stddev; // range * tan(incident) * sigma_angle
-    double sigma_a = dist * sin_incident / cos_incident * bearing_stddev; // range * tan(incident) * sigma_angle
-    return min(incident_cov_max, incident_cov_scale * sigma_a * sigma_a); // scale * sigma_a^2
-}
+//// ray: unit vector
+//double calcIncidentCovScale(const V3D & ray, const double & dist, const V3D& normal)
+//{
+////    static double angle_rad = DEG2RAD(angle_cov);
+//    double cos_incident = abs(normal.dot(ray));
+//    cos_incident = max(cos_incident, incident_cos_min);
+//    double sin_incident = sqrt(1 - cos_incident * cos_incident);
+////    return dist * sin_incident / cos_incident * bearing_stddev; // range * tan(incident) * sigma_angle
+//    double sigma_a = dist * sin_incident / cos_incident * bearing_stddev; // range * tan(incident) * sigma_angle
+//    return min(incident_cov_max, incident_cov_scale * sigma_a * sigma_a); // scale * sigma_a^2
+//}
 
 void generateCloudOnPlaneWithRangeBearing(const V3D & lidar, const V3D & normal_input, vector<V3D>& cloud,
                                           double & incident_out)
@@ -220,37 +216,35 @@ void recordLidarID(const vector<V3D> & lidars_tmp, const vector<vector<V3D>> clo
     }
 }
 
-void cloud2lidar(vector<V4D>& cloud, vector<V4D>& lidars, vector<vector<V4D>> & cloud_per_lidar,
-                 vector<double> &mean_incidents)
+void cloud2lidar()
 {
     vector<V3D> lidars_tmp;
     generateLidar(lidars_tmp);
 
-    vector<V3D> normals_tmp;
-    generatePerturbedNormal(normals_tmp);
+//    vector<V3D> normals_tmp;
+    generatePerturbedNormal(normal_per_lidar);
 
     mean_incidents.resize(num_lidar);
     vector<vector<V3D>> cloud_per_lidar_tmp(num_lidar);
     for (int i = 0; i < num_lidar; ++i) {
-        generateCloudOnPlane(lidars_tmp[i], normals_tmp[i], cloud_per_lidar_tmp[i], mean_incidents[i]);
+        generateCloudOnPlane(lidars_tmp[i], normal_per_lidar[i], cloud_per_lidar_tmp[i], mean_incidents[i]);
     }
 
     recordLidarID(lidars_tmp, cloud_per_lidar_tmp, cloud, lidars, cloud_per_lidar);
 }
 
-void cloud2lidarWithRangeAndBearing(vector<V4D>& cloud, vector<V4D>& lidars, vector<vector<V4D>> & cloud_per_lidar,
-                                    vector<double> & mean_incidents)
+void cloud2lidarWithRangeAndBearing()
 {
     vector<V3D> lidars_tmp;
     generateLidar(lidars_tmp);
 
-    vector<V3D> normals_tmp;
-    generatePerturbedNormal(normals_tmp);
+//    vector<V3D> normals_tmp;
+    generatePerturbedNormal(normal_per_lidar);
 
     vector<vector<V3D>> cloud_per_lidar_tmp(num_lidar);
     mean_incidents.resize(num_lidar);
     for (int i = 0; i < num_lidar; ++i) {
-        generateCloudOnPlaneWithRangeBearing(lidars_tmp[i], normals_tmp[i], cloud_per_lidar_tmp[i], mean_incidents[i]);
+        generateCloudOnPlaneWithRangeBearing(lidars_tmp[i], normal_per_lidar[i], cloud_per_lidar_tmp[i], mean_incidents[i]);
     }
 
     recordLidarID(lidars_tmp, cloud_per_lidar_tmp, cloud, lidars, cloud_per_lidar);
@@ -281,18 +275,48 @@ void readParams()
     incident_max = tag_settting.get<double>("incident_max", 0.0);
     incident_cov_max = tag_settting.get<double>("incident_cov_max", 0.0);
     incident_cov_scale = tag_settting.get<double>("incident_cov_scale", 0.0);
+    refine_maximum_iter = tag_settting.get<int>("refine_maximum_iter", 0);
 
     noise_type = tag_settting.get<int>("noise_type", 1);
     printf("noise_type: %d\nnormal_pert: %.3f\nrange_stddev: %.3f\nbearing_stddev_deg: %.3f\n",
            noise_type, normal_pert, range_stddev, bearing_stddev_deg);
-    printf("incident_max: %.3f\nincident_cov_max: %.3f\nincident_cov_scale:%.3f\n",
-           incident_max, incident_cov_max, incident_cov_scale);
+    printf("incident_max: %.3f\nincident_cov_max: %.3f\nincident_cov_scale:%.3f\nrefine_maximum_iter: %d\n",
+           incident_max, incident_cov_max, incident_cov_scale, refine_maximum_iter);
 
 
     lidar_width = plane_width * 3.0;
     bearing_stddev = DEG2RAD(bearing_stddev_deg);
     incident_cos_min = cos(incident_max / 180.0 * M_PI);
 
+    normal_per_lidar.resize(num_lidar);
+}
+
+// todo record as type pointWithCov
+void recordPWC(const vector<V4D>& cloud_input, const V3D & n, const V4D & lidar, vector<pointWithCov> & cloud_out)
+{
+    cloud_out.resize(cloud_input.size());
+    for (int i = 0; i < (int)cloud_input.size(); ++i) {
+        const V4D & p_world = cloud_input[i];
+        pointWithCov & pv = cloud_out[i];
+        pv.point << p_world(0), p_world(1), p_world(2);
+        pv.normal << n(0), n(1), n(2); //TODO
+        pv.ray = pv.point - lidar.head(3);
+        pv.p2lidar = pv.ray.norm();
+        pv.ray.normalize();
+//        pv.roughness_cov = calcRoughCovScale(feats_down_body->points[i].intensity); //TODO
+        pv.roughness_cov = 0.0;
+        pv.tangent_cov = pow(DEG2RAD(range_stddev), 2) * pv.p2lidar * pv.p2lidar;
+    }
+}
+
+void recordCloudWithCov()
+{
+    pointWithCov_per_lidar.resize(num_lidar);
+    for (int i = 0; i < num_lidar; ++i) {
+        recordPWC(cloud_per_lidar[i], normal_per_lidar[i], lidars[i], pointWithCov_per_lidar[i]);
+        pointWithCov_all.insert(pointWithCov_all.end(),
+                                pointWithCov_per_lidar[i].begin(), pointWithCov_per_lidar[i].end());
+    }
 }
 
 int main(int argc, char** argv) {
@@ -311,26 +335,26 @@ int main(int argc, char** argv) {
 //    vector<V3D> lidars;
 //    generateLidar(lidars, 10);
 
-    vector<V4D> cloud, lidars;
-    vector<vector<V4D>> cloud_per_lidar;
-    vector<double> mean_incidents;
+//    vector<V4D> cloud, lidars;
+//    vector<vector<V4D>> cloud_per_lidar;
+//    vector<double> mean_incidents;
     switch (noise_type) {
         case 1:
         {
             printf("***noise: iostropic.***\n");
-            cloud2lidar(cloud, lidars, cloud_per_lidar, mean_incidents);
+            cloud2lidar();
             break;
         }
         case 2:
         {
             printf("***noise: range and bearing.***\n");
-            cloud2lidarWithRangeAndBearing(cloud, lidars, cloud_per_lidar, mean_incidents);
+            cloud2lidarWithRangeAndBearing();
             break;
         }
         case 3:
         {
             printf("***noise: range, bearing, invident and roughness.***\n");
-            cloud2lidarWithRangeAndBearing(cloud, lidars, cloud_per_lidar, mean_incidents);
+            cloud2lidarWithRangeAndBearing();
             break;
         }
     }
@@ -351,22 +375,31 @@ int main(int argc, char** argv) {
 
     // do PCA per lidar
     vector<M3D> eigen_vectors(num_lidar);
-    vector<V3D> eigen_values(num_lidar), controids(num_lidar);
+    vector<V3D> eigen_values(num_lidar), centroids(num_lidar);
     for (int i = 0; i < num_lidar; ++i) {
-        PCA(cloud_per_lidar[i], eigen_vectors[i], eigen_values[i], controids[i]);
-        double resudial = point2planeResidual(cloud_per_lidar[i],  controids[i], eigen_vectors[i].col(0));
+        PCA(cloud_per_lidar[i], eigen_vectors[i], eigen_values[i], centroids[i]);
+        double resudial = point2planeResidual(cloud_per_lidar[i], centroids[i], eigen_vectors[i].col(0));
         double theta = diff_normal(normal, eigen_vectors[i].col(0));
         printf("lidar #%d\nmean_incident: %f\nnormal diff= %f deg\nsum residual^2: %f\n\n",
                i, mean_incidents[i], theta / M_PI * 180.0, resudial);
     }
 
     M3D eigen_vectors_merged;
-    V3D eigen_values_merged, controid_merged;
-    PCA(cloud, eigen_vectors_merged, eigen_values_merged, controid_merged);
-    double resudial_merged = point2planeResidual(cloud,  controid_merged, eigen_vectors_merged.col(0));
+    V3D eigen_values_merged, centroid_merged;
+    PCA(cloud, eigen_vectors_merged, eigen_values_merged, centroid_merged);
+    double resudial_merged = point2planeResidual(cloud, centroid_merged, eigen_vectors_merged.col(0));
     double theta_merged = diff_normal(normal,eigen_vectors_merged.col(0));
     printf("cloud merged\nnormal diff: %f deg\nsum residual^2: %f\n\n", theta_merged / M_PI * 180.0,
            resudial_merged);
-    
-    
+
+    V3D pca_normal_merged = eigen_vectors_merged.col(0);
+    // to pointWithCov format
+    recordCloudWithCov();
+    V3D normal_refine, centroid_refine;
+    refineNormalAndCenterDWithCov(pca_normal_merged, pointWithCov_all, centroid_merged,
+                                  normal_refine, centroid_refine);
+    double resudial_merged_refine = point2planeResidual(cloud, centroid_refine, normal_refine);
+    double theta_merged_refine = diff_normal(normal, normal_refine);
+    printf("refine\nnormal diff: %f deg\nsum residual^2: %f\n\n", theta_merged_refine / M_PI * 180.0,
+           resudial_merged_refine);
 }
