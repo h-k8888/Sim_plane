@@ -163,6 +163,15 @@ double diff_normal(const V3D & n1, const V3D & n2)
     return theta;
 }
 
+double point2planeResidual(const vector<pointWithCov> & points, const V3D & centroid, const V3D & normal)
+{
+    double sum_dist2 = 0;
+    for (int i = 0; i < points.size(); ++i) {
+        double dist = normal.dot(points[i].point - centroid);
+        sum_dist2 += dist * dist;
+    }
+    return sum_dist2;
+}
 
 double point2planeResidual(const vector<V4D> & points, const V3D & centroid, const V3D & normal)
 {
@@ -187,7 +196,8 @@ void findLocalTangentBases(const V3D& dir, V3D & base1, V3D & base2)
     base2.normalize();
 }
 
-double threshold = 0.001;
+double angle_threshold = 0.1;
+double dist_threshold = 0.001;
 void refineNormalAndCenterDWithCov(const V3D& normal_input, const std::vector<pointWithCov> &points,
                                    const V3D & center_input, V3D & normal_out, V3D & center_out)
 {
@@ -197,6 +207,11 @@ void refineNormalAndCenterDWithCov(const V3D& normal_input, const std::vector<po
     int i = -1;
     for(; i < refine_maximum_iter; ++i)
     {
+//        double resudial_merged_refine = point2planeResidual(points, center, normal);
+//        double theta_merged_refine = diff_normal(normal_input, normal);
+//        printf("refined iter %d\nnormal diff: %f deg\nsum residual^2: %f\n\n", i, theta_merged_refine / M_PI * 180.0,
+//               resudial_merged_refine);
+
         // find base vector in the local tangent space
         V3D bn1, bn2;
         findLocalTangentBases(normal, bn1, bn2);
@@ -219,9 +234,12 @@ void refineNormalAndCenterDWithCov(const V3D& normal_input, const std::vector<po
             V3D br1, br2;
             findLocalTangentBases(ray, br1, br2);
             M3D A;
-            A.row(0) = range_var_inv * ray.transpose();
-            A.row(1) = tangent_var_inv * bn1.transpose();
-            A.row(2) = tangent_var_inv * bn2.transpose();
+//            A.row(0) = range_var_inv * ray.transpose();
+//            A.row(1) = tangent_var_inv * bn1.transpose();
+//            A.row(2) = tangent_var_inv * bn2.transpose();
+            A.row(0) = ray.transpose();
+            A.row(1) = br1.transpose();
+            A.row(2) = br2.transpose();
             M3D Jw_i;
 //            double NtP = normal.transpose() * c2p;
             Jw_i.col(0) = A * (bn1 * normal.transpose() + normal * bn1.transpose()) * c2p;
@@ -243,20 +261,30 @@ void refineNormalAndCenterDWithCov(const V3D& normal_input, const std::vector<po
 //            ROS_INFO("delta_w [%f %f] delta_d [%f]", d_w(0), d_w(1), d_w(2));
 
         V3D dn = d_w(0) * bn1 + d_w(1) * bn2; // diff normal
-        normal += dn;
-        normal.normalize();
+        V3D normal_refine = normal + dn;
+        normal_refine.normalize();
+        center += normal_refine * d_w(2);
 
-        center += normal * d_w(2);
+        double resudial_merged_refine = point2planeResidual(points, center, normal_refine);
+        double theta_merged_refine = diff_normal(normal, normal_refine);
+        double diff_angle = theta_merged_refine / M_PI * 180.0;
 
-        for (int j = 0; j < 3; ++j) {
-            if (d_w(j) > threshold) {
-                is_converge = false;
+        printf("refined iter %d\nnormal diff: %f deg\ndist: %f\nsum residual^2: %f\n\n", i, diff_angle, d_w(2),
+               resudial_merged_refine);
+
+
+        normal = normal_refine;
+
+//        for (int j = 0; j < 3; ++j)
+//        {
+            if (diff_angle < angle_threshold && d_w(2) < dist_threshold) {
+//                is_converge = false;
                 break;
             }
-        }
+//        }
 
-        if (is_converge)
-            break;
+//        if (is_converge)
+//            break;
     }
 //        ROS_INFO("%d iter normal old [%f %f %f] new [%f %f %f]", i, normal_input(0), normal_input(1), normal_input(2),
 //                 normal(0), normal(1), normal(2));
@@ -265,4 +293,90 @@ void refineNormalAndCenterDWithCov(const V3D& normal_input, const std::vector<po
     normal_out = normal;
     center_out = center;
 }
+
+V3D refineNormalWithCov(const V3D& normal_input, const std::vector<pointWithCov> &points, const V3D & center_input)
+{
+//    bool is_converge = true;
+    V3D normal = normal_input;
+    int i = -1;
+    for(; i < refine_maximum_iter; ++i)
+    {
+        // find base vector in the local tangent space
+        V3D bn1, bn2;
+        findLocalTangentBases(normal, bn1, bn2);
+
+        M3D NNt = normal * normal.transpose();
+        Eigen::Matrix2d JtJ = Eigen::Matrix2d::Zero();
+        Eigen::Vector2d Jte = Eigen::Vector2d::Zero();
+        for (int j = 0; j < points.size(); j++) {
+            const pointWithCov &pv = points[j];
+            // point to plane E dist^2
+            V3D c2p = pv.point - center_input;
+
+            double range_cov, tan_cov;
+            pv.getCovValues(range_cov, tan_cov, normal);
+            double range_var_inv = 1.0 / sqrt(range_cov); // 1 / sigma range
+            double tangent_var_inv = 1.0 / sqrt(tan_cov); // 1 / (range * sigma angle)
+
+            // construct V
+            // todo record br1, br2
+            V3D ray = pv.ray;
+            ray.normalize();
+            V3D br1, br2;
+            findLocalTangentBases(ray, br1, br2);
+            M3D A;
+//            A.row(0) = range_var_inv * ray.transpose();
+//            A.row(1) = tangent_var_inv * bn1.transpose();
+//            A.row(2) = tangent_var_inv * bn2.transpose();
+            A.row(0) = ray.transpose();
+            A.row(1) = br1.transpose();
+            A.row(2) = br2.transpose();
+
+//            cout << "r dot b1: " << ray.dot(br1) << endl;
+//            cout << "r dot b2: " << ray.dot(br2) << endl;
+//            assert(ray.dot(br1) == 0);
+//            assert(ray.dot(br2) == 0);
+//            cout << "AtA_i:\n" << A.transpose() * A << endl;
+
+            Eigen::Matrix<double, 3, 2> Jw_i;
+//            double NtP = normal.transpose() * c2p;
+            Jw_i.col(0) = A * (bn1 * normal.transpose() + normal * bn1.transpose()) * c2p;
+            Jw_i.col(1) = A * (bn2 * normal.transpose() + normal * bn2.transpose()) * c2p;
+            V3D e_i = A * NNt * c2p;
+//            cout << "JtJ_i:\n" << Jw_i.transpose() * Jw_i << endl;
+            JtJ += Jw_i.transpose() * Jw_i;
+            Eigen::Vector2d Jte_i = Jw_i.transpose() * e_i;
+            Jte += Jte_i;
+//            cout << "Jw_i" << Jw_i << endl;
+        }
+//            cout << "JtJ:\n" << JtJ << endl;
+//            cout << "Jte:\n" << Jte.transpose() << endl;
+
+        Eigen::Vector2d d_w = -(JtJ).inverse() * Jte;
+        V3D dn = d_w(0) * bn1 + d_w(1) * bn2;
+
+        V3D normal_refine = normal + dn;
+        normal_refine.normalize();
+
+        double resudial_merged_refine = point2planeResidual(points, center_input, normal_refine);
+        double theta_merged_refine = diff_normal(normal, normal_refine);
+        double diff_angle = theta_merged_refine / M_PI * 180.0;
+        printf("refined iter %d\nnormal diff: %f deg\nsum residual^2: %f\n\n", i, diff_angle,
+               resudial_merged_refine);
+
+        normal = normal_refine;
+        if (diff_angle < angle_threshold)
+            break;
+//            is_converge = false;
+//
+////            ROS_INFO("dw [%f %f]  dn [%f %f %f]", d_w(0), d_w(1), dn(0), dn(1), dn(2));
+//
+//        if (is_converge)
+//            break;
+    }
+//        ROS_INFO("%d iter normal old [%f %f %f] new [%f %f %f]", i, normal_input(0), normal_input(1), normal_input(2),
+//                 normal(0), normal(1), normal(2));
+    return normal;
+}
+
 #endif //SIM_PLANE_SIM_PLANE_H

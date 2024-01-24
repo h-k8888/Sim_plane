@@ -400,6 +400,14 @@ int main(int argc, char** argv) {
                                   normal_refine, centroid_refine);
     double resudial_merged_refine = point2planeResidual(cloud, centroid_refine, normal_refine);
     double theta_merged_refine = diff_normal(normal, normal_refine);
-    printf("refine\nnormal diff: %f deg\nsum residual^2: %f\n\n", theta_merged_refine / M_PI * 180.0,
+    printf("refine n d1\nnormal diff: %f deg\nsum residual^2: %f\n\n", theta_merged_refine / M_PI * 180.0,
            resudial_merged_refine);
+
+    printf("cloud merged\nnormal diff: %f deg\nsum residual^2: %f\n\n", theta_merged / M_PI * 180.0,
+           resudial_merged);
+    V3D normal_refine_n = refineNormalWithCov(pca_normal_merged, pointWithCov_all, centroid_merged);
+    double resudial_refine_n = point2planeResidual(cloud, centroid_merged, normal_refine_n);
+    double theta_refine_n = diff_normal(normal, normal_refine_n);
+    printf("refine n\nnormal diff: %f deg\nsum residual^2: %f\n\n", theta_refine_n / M_PI * 180.0,
+           resudial_refine_n);
 }
