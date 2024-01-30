@@ -377,11 +377,12 @@ int main(int argc, char** argv) {
     vector<M3D> eigen_vectors(num_lidar);
     vector<V3D> eigen_values(num_lidar), centroids(num_lidar);
     for (int i = 0; i < num_lidar; ++i) {
+        printf("lidar #%d\n", i);
         PCA(cloud_per_lidar[i], eigen_vectors[i], eigen_values[i], centroids[i]);
         double resudial = point2planeResidual(cloud_per_lidar[i], centroids[i], eigen_vectors[i].col(0));
         double theta = diff_normal(normal, eigen_vectors[i].col(0));
-        printf("lidar #%d\nmean_incident: %f\nnormal diff= %f deg\nsum residual^2: %f\n\n",
-               i, mean_incidents[i], theta / M_PI * 180.0, resudial);
+        printf("mean_incident: %f\nnormal diff= %f deg\nsum residual^2: %f\n\n",
+               mean_incidents[i], theta / M_PI * 180.0, resudial);
     }
 
     M3D eigen_vectors_merged;

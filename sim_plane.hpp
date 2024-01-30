@@ -17,6 +17,8 @@
 
 #include "IKFoM_toolkit/esekfom/esekfom.hpp"
 
+#include "tic_toc.h"
+
 #ifndef DEG2RAD
 #define DEG2RAD(x) ((x)*0.017453293)
 #endif
@@ -81,6 +83,7 @@ void printM(const M3D & m, const string & s)
 // PCA
 void PCA(const vector<V3D>& points, M3D & eigen_vectors, V3D & eigen_values, V3D & center)
 {
+    TicToc t_start;
 //    plane_cov = Eigen::Matrix<double, 6, 6>::Zero();
     M3D covariance = Eigen::Matrix3d::Zero();
     center = Eigen::Vector3d::Zero();
@@ -99,13 +102,18 @@ void PCA(const vector<V3D>& points, M3D & eigen_vectors, V3D & eigen_values, V3D
     Eigen::SelfAdjointEigenSolver<M3D> saes(covariance);
     eigen_vectors = saes.eigenvectors();
     eigen_values = saes.eigenvalues(); // lambda_0 < lambda_1 < lambda_2
+
     const double evals_min = eigen_values(0);
     const double evals_mid = eigen_values(1);
     const double evals_max = eigen_values(2);
     V3D eigen_normal = eigen_vectors.col(0);
     V3D eigen_v_mid = eigen_vectors.col(1);
     V3D eigen_v_max = eigen_vectors.col(2);
+
+    double t_cost = t_start.toc();
     printV(eigen_normal, "PCA normal");
+    printf("PCA cost: %.6fms\n", t_cost);
+
 }
 
 void PCA(const vector<V4D>& points, M3D & eigen_vectors, V3D & eigen_values, V3D & center)
@@ -187,6 +195,7 @@ double point2planeResidual(const vector<V4D> & points, const V3D & centroid, con
 // dir must be a unit vector
 void findLocalTangentBases(const V3D& dir, V3D & base1, V3D & base2)
 {
+    TicToc t_start;
     // find base vector in the local tangent space
     base1 = dir.cross(V3D(1.0, 0, 0));
     if (dir(0) == 1.0)
@@ -194,6 +203,7 @@ void findLocalTangentBases(const V3D& dir, V3D & base1, V3D & base2)
     base1.normalize();
     base2 = dir.cross(base1);
     base2.normalize();
+//    printf("findLocalTangentBases cost: %fms\n", t_start.toc());
 }
 
 double angle_threshold = 0.1;
@@ -383,14 +393,16 @@ V3D refineNormalWithCov(const V3D& normal_input, const std::vector<pointWithCov>
 
 V3D refineNormal(const V3D& normal_input, const std::vector<pointWithCov> &points, const V3D & center_input)
 {
-//    bool is_converge = true;
     V3D normal = normal_input;
     int i = -1;
     for(; i < refine_maximum_iter; ++i)
     {
+        TicToc t_start;
+
         // find base vector in the local tangent space
         V3D bn1, bn2;
         findLocalTangentBases(normal, bn1, bn2);
+        double cost_base = t_start.toc();
 
         M3D NNt = normal * normal.transpose();
         Eigen::Matrix2d JtJ = Eigen::Matrix2d::Zero();
@@ -402,13 +414,18 @@ V3D refineNormal(const V3D& normal_input, const std::vector<pointWithCov> &point
 
             // construct V
             V3D ray = pv.ray;
-            ray.normalize();
+            M3D A;
+
+//            ray.normalize();
             V3D br1, br2;
             findLocalTangentBases(ray, br1, br2);
-            M3D A;
             A.row(0) = ray.transpose();
             A.row(1) = br1.transpose();
             A.row(2) = br2.transpose();
+//            A.row(0) = ray.transpose();
+//            V3D br1 = normal.cross(ray).normalized();
+//            A.row(1) = br1; // br1
+//            A.row(2) = ray.cross(br1).normalized(); //br2
 
 //            cout << "r dot b1: " << ray.dot(br1) << endl;
 //            cout << "r dot b2: " << ray.dot(br2) << endl;
@@ -431,6 +448,9 @@ V3D refineNormal(const V3D& normal_input, const std::vector<pointWithCov> &point
 //            cout << "Jte:\n" << Jte.transpose() << endl;
 
         Eigen::Vector2d d_w = -(JtJ).inverse() * Jte;
+
+        double t_cost = t_start.toc();
+
         V3D dn = d_w(0) * bn1 + d_w(1) * bn2;
 
         V3D normal_refine = normal + dn;
@@ -439,24 +459,98 @@ V3D refineNormal(const V3D& normal_input, const std::vector<pointWithCov> &point
         double resudial_merged_refine = point2planeResidual(points, center_input, normal_refine);
         double theta_merged_refine = diff_normal(normal, normal_refine);
         double diff_angle = theta_merged_refine / M_PI * 180.0;
-        printf("\nrefined iter %d\nnormal diff: %f deg\nsum residual^2: %f\n",
-               i, diff_angle, resudial_merged_refine);
-        cout << "Jte: " << Jte.transpose() << endl;
+//        printf("\nrefined iter %d\nnormal diff: %f deg\nsum residual^2: %f\n",
+//               i, diff_angle, resudial_merged_refine);
+//        cout << "Jte: " << Jte.transpose() << endl;
 
         normal = normal_refine;
+
+        printf("find local bases cost: %fms\nrefine iter once cost: %.6fms\n", cost_base, t_cost);
+
         if (diff_angle < angle_threshold)
             break;
-//            is_converge = false;
-//
-////            ROS_INFO("dw [%f %f]  dn [%f %f %f]", d_w(0), d_w(1), dn(0), dn(1), dn(2));
-//
-//        if (is_converge)
-//            break;
     }
 //        ROS_INFO("%d iter normal old [%f %f %f] new [%f %f %f]", i, normal_input(0), normal_input(1), normal_input(2),
 //                 normal(0), normal(1), normal(2));
     return normal;
 }
 
+V3D fasterRefineNormal(const V3D& normal_input, const std::vector<pointWithCov> &points, const V3D & center_input)
+{
+    V3D normal = normal_input;
+    int i = -1;
+    for(; i < refine_maximum_iter; ++i)
+    {
+        TicToc t_start;
+
+        // find base vector in the local tangent space
+        V3D bn1, bn2;
+        findLocalTangentBases(normal, bn1, bn2);
+        double cost_base = t_start.toc();
+
+        M3D NNt = normal * normal.transpose();
+        Eigen::Matrix2d JtJ = Eigen::Matrix2d::Zero();
+        Eigen::Vector2d Jte = Eigen::Vector2d::Zero();
+        for (int j = 0; j < points.size(); j++) {
+            const pointWithCov &pv = points[j];
+            // point to plane E dist^2
+            V3D c2p = pv.point - center_input;
+
+            // construct V
+            V3D ray = pv.ray;
+            M3D A;
+
+//            ray.normalize();
+//            V3D br1, br2;
+//            findLocalTangentBases(ray, br1, br2);
+//            A.row(0) = ray.transpose();
+//            A.row(1) = br1.transpose();
+//            A.row(2) = br2.transpose();
+            A.row(0) = ray.transpose();
+            V3D br1 = normal.cross(ray).normalized();
+            A.row(1) = br1; // br1
+            A.row(2) = ray.cross(br1).normalized(); //br2
+
+            Eigen::Matrix<double, 3, 2> Jw_i;
+//            double NtP = normal.transpose() * c2p;
+            Jw_i.col(0) = A * (bn1 * normal.transpose() + normal * bn1.transpose()) * c2p;
+            Jw_i.col(1) = A * (bn2 * normal.transpose() + normal * bn2.transpose()) * c2p;
+            V3D e_i = A * NNt * c2p;
+//            cout << "JtJ_i:\n" << Jw_i.transpose() * Jw_i << endl;
+            JtJ += Jw_i.transpose() * Jw_i;
+            Eigen::Vector2d Jte_i = Jw_i.transpose() * e_i;
+            Jte += Jte_i;
+//            cout << "Jw_i" << Jw_i << endl;
+        }
+//            cout << "JtJ:\n" << JtJ << endl;
+//            cout << "Jte:\n" << Jte.transpose() << endl;
+
+        Eigen::Vector2d d_w = -(JtJ).inverse() * Jte;
+
+        double t_cost = t_start.toc();
+
+        V3D dn = d_w(0) * bn1 + d_w(1) * bn2;
+
+        V3D normal_refine = normal + dn;
+        normal_refine.normalize();
+
+        double resudial_merged_refine = point2planeResidual(points, center_input, normal_refine);
+        double theta_merged_refine = diff_normal(normal, normal_refine);
+        double diff_angle = theta_merged_refine / M_PI * 180.0;
+//        printf("\nrefined iter %d\nnormal diff: %f deg\nsum residual^2: %f\n",
+//               i, diff_angle, resudial_merged_refine);
+//        cout << "Jte: " << Jte.transpose() << endl;
+
+        normal = normal_refine;
+
+        printf("find local bases cost: %fms\nrefine iter once cost: %.6fms\n", cost_base, t_cost);
+
+        if (diff_angle < angle_threshold)
+            break;
+    }
+//        ROS_INFO("%d iter normal old [%f %f %f] new [%f %f %f]", i, normal_input(0), normal_input(1), normal_input(2),
+//                 normal(0), normal(1), normal(2));
+    return normal;
+}
 
 #endif //SIM_PLANE_SIM_PLANE_H
