@@ -441,4 +441,23 @@ int main(int argc, char** argv) {
     }
     // refine normal
 
+//    printIncidentCov();
+
+    // test incremental Cov
+    M3D cov_1;
+    V3D center_1;
+    vector<V4D> cloud_1(cloud.begin(), cloud.end() - 1);
+    calcCovMatrix(cloud_1, cov_1, center_1);
+    printM(cov_1, "cov n - 1");
+
+    M3D cov;
+    V3D center;
+    calcCovMatrix(cloud, cov, center);
+    printM(cov, "cov n");
+
+    double n = cloud.size();
+    const V3D & xn = cloud.back().head(3);
+    V3D xn_mn_1 = xn - center_1;
+    M3D cov_incre = (n - 1) / n * (cov_1 + (xn_mn_1 * xn_mn_1.transpose()) / n);
+    printM(cov_incre, "cov n incre");
 }

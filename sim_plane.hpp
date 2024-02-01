@@ -80,6 +80,32 @@ void printM(const M3D & m, const string & s)
     cout << s << ":\n" << m <<endl;
 }
 
+void calcCovMatrix(const vector<V3D>& points, M3D & covariance, V3D & center)
+{
+    int points_size = points.size();
+    center = Eigen::Vector3d::Zero();
+    V3D normal = Eigen::Vector3d::Zero();
+
+    for (int i = 0; i < points_size; ++i) {
+        const V3D& pv = points[i];
+        covariance += pv * pv.transpose();
+        center += pv;
+    }
+    center = center / points_size;
+    covariance = covariance / points_size - center * center.transpose();
+}
+
+
+void calcCovMatrix(const vector<V4D>& points, M3D & covariance, V3D & center)
+{
+    vector<V3D> cloud(points.size());
+    for (int i = 0; i < points.size(); ++i) {
+        cloud[i] = points[i].head(3);
+    }
+    calcCovMatrix(cloud, covariance, center);
+}
+
+
 // PCA
 void PCA(const vector<V3D>& points, M3D & eigen_vectors, V3D & eigen_values, V3D & center)
 {
@@ -551,6 +577,21 @@ V3D fasterRefineNormal(const V3D& normal_input, const std::vector<pointWithCov> 
 //        ROS_INFO("%d iter normal old [%f %f %f] new [%f %f %f]", i, normal_input(0), normal_input(1), normal_input(2),
 //                 normal(0), normal(1), normal(2));
     return normal;
+}
+
+void printIncidentCov()
+{
+    double dist = 5;
+    for (int i = 0; i <= 90; ++i) {
+        double incident = (double)i / 180.0 * M_PI;
+        double sigma_incident = dist * tan(incident) * bearing_stddev; // range * tan(incident) * sigma_angle
+        double cov_incident = sigma_incident * sigma_incident;
+        double cov_inv_n = cos(incident) * cos(incident) / (range_stddev * range_stddev + cov_incident) +
+                sin(incident) *  sin(incident) / (bearing_stddev * bearing_stddev );
+        double cov_ra_n = cos(incident) * cos(incident) / (range_stddev * range_stddev) +
+                           sin(incident) * sin(incident) / (bearing_stddev * bearing_stddev);
+        printf("%i degree cov inv:\nincident %f\talong normal %f(inc)\t%f(w\\o inc)\n", i, cov_incident, cov_inv_n, cov_ra_n);
+    }
 }
 
 #endif //SIM_PLANE_SIM_PLANE_H
