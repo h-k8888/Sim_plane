@@ -444,20 +444,35 @@ int main(int argc, char** argv) {
 //    printIncidentCov();
 
     // test incremental Cov
+    int iter_points = 20;
     M3D cov_1;
     V3D center_1;
-    vector<V4D> cloud_1(cloud.begin(), cloud.end() - 1);
+    vector<V4D> cloud_1(cloud.begin(), cloud.end() - iter_points);
     calcCovMatrix(cloud_1, cov_1, center_1);
     printM(cov_1, "cov n - 1");
+    printV(center_1, "center n - 1");
 
     M3D cov;
     V3D center;
     calcCovMatrix(cloud, cov, center);
-    printM(cov, "cov n");
+    printM(cov, "\ncov n");
+    printV(center, "center n");
 
-    double n = cloud.size();
-    const V3D & xn = cloud.back().head(3);
-    V3D xn_mn_1 = xn - center_1;
-    M3D cov_incre = (n - 1) / n * (cov_1 + (xn_mn_1 * xn_mn_1.transpose()) / n);
-    printM(cov_incre, "cov n incre");
+
+    double m = cloud.size();
+    M3D cov_incre = cov_1;
+    V3D center_incre = center_1;
+    for (int i = cloud.size() - iter_points; i < m; ++i) {
+        double n = i + 1;
+        const V3D & xn = cloud[i].head(3);
+        V3D xn_mn_1 = xn - center_incre;
+        cov_incre = (n - 1) / n * (cov_incre + (xn_mn_1 * xn_mn_1.transpose()) / n);
+        center_incre = center_incre / n * (n - 1) + xn / n;
+    }
+    printM(cov_incre, "\ncov n incre");
+    printV(center_incre, "center_incre");
+
+    printM(cov - cov_incre, "\ncov diff");
+    printV(center - center_incre, "center diff");
+
 }
