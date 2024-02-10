@@ -613,31 +613,30 @@ void incrementalDeEigenValue(const vector<V3D> & points, const M3D & eigen_vecto
                              const vector<V3D> & Jpi_old, const M3D & eigen_vectors_new, vector<V3D> & Jpi_new)
 {
     double n = (double)points.size();
-    double n_1 = n - 1.0;
     const V3D & xn = points.back();
     V3D xn_mn1 = xn - center_old;
     const V3D e1 = eigen_vectors_new.col(0); // n
-    const V3D e2 = eigen_vectors_new.col(1);
-    const V3D e3 = eigen_vectors_new.col(2);
+//    const V3D e2 = eigen_vectors_new.col(1);
+//    const V3D e3 = eigen_vectors_new.col(2);
     const V3D en_1 = eigen_vectors_new.col(0); // n - 1
-    const V3D en_2 = eigen_vectors_new.col(1);
-    const V3D en_3 = eigen_vectors_new.col(2);
-    vector<double> cos_vectors(3); // en * en_1
-    for (int i = 0; i < 3; ++i)
-        cos_vectors[i] = abs(eigen_vectors_new.col(i).dot(eigen_vectors_old.col(i)));
+//    const V3D en_2 = eigen_vectors_new.col(1);
+//    const V3D en_3 = eigen_vectors_new.col(2);
+//    vector<double> cos_vectors(3); // en * en_1
+//    for (int i = 0; i < 3; ++i)
+//        cos_vectors[i] = abs(eigen_vectors_new.col(i).dot(eigen_vectors_old.col(i)));
 
     double cos_n = abs(xn_mn1.dot(e1));
     double cos_n_1 = abs(xn_mn1.dot(en_1));
     double cos_theta = abs(e1.dot(en_1));
     Jpi_new.resize(points.size());
-    double scale_1 = n_1 / n;
+    double scale_1 = (n - 1) / n;
     V3D term_2 =  (cos_n * en_1 + cos_n_1 * e1) / (n * n * cos_theta);
     for (int i = 0; i < points.size() - 1; ++i) { // i = 1, 2 ..., n-1
         Jpi_new[i] = scale_1 * Jpi_old[i] - term_2;
     }
 
     // for i = n
-    Jpi_new.back() = term_2 * n_1;
+    Jpi_new.back() = term_2 * (n - 1);
 }
 
 #endif //SIM_PLANE_SIM_PLANE_H
