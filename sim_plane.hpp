@@ -594,4 +594,16 @@ void printIncidentCov()
     }
 }
 
+/// partial derivative of eigen value with respect to point
+void derivativeEigenValue(const vector<V3D> & points, const M3D & eigen_vectors,
+                          const V3D & eigen_values, const V3D & center, const int& lambda_i)
+{
+    double n = (double)points.size();
+    V3D point_center = V3D::Zero();
+    for (int i = 0; i < points.size(); ++i) {
+        point_center += (points[i] - center);
+    }
+    V3D lambda_d_p = 2.0 / n * point_center.transpose() * eigen_vectors.col(lambda_i) * eigen_vectors.col(lambda_i).transpose();
+}
+
 #endif //SIM_PLANE_SIM_PLANE_H
