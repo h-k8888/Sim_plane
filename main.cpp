@@ -41,7 +41,7 @@ double incident_cos_min = cos(incident_max / 180.0 * M_PI);
 double incident_cov_max, incident_cov_scale;
 
 int refine_maximum_iter;
-bool refine_normal_en, incre_cov_en;
+bool refine_normal_en, incre_cov_en, incre_derivative_en;
 double incre_points = 20;
 
 
@@ -289,6 +289,8 @@ void readParams()
     printf("incident_max: %.3f\nincident_cov_max: %.3f\nincident_cov_scale:%.3f\nrefine_maximum_iter: %d\n",
            incident_max, incident_cov_max, incident_cov_scale, refine_maximum_iter);
 
+    tag_settting = m_pt.get_child("incremental_derivative");
+    incre_derivative_en = tag_settting.get<bool>("incre_derivative_en", false);
 
     lidar_width = plane_width * 3.0;
     bearing_stddev = DEG2RAD(bearing_stddev_deg);
@@ -450,23 +452,40 @@ int main(int argc, char** argv) {
     }
     // refine normal
 
-//    printIncidentCov();
-
     // test incremental Cov
-    if (incre_cov_en)
+    if (incre_cov_en || incre_derivative_en)
     {
+        printf("\n****** incremental **********\n");
         M3D cov_1;
         V3D center_1;
         vector<V4D> cloud_1(cloud.begin(), cloud.end() - incre_points);
         calcCovMatrix(cloud_1, cov_1, center_1);
-        printM(cov_1, "cov n - 1");
-        printV(center_1, "center n - 1");
+        if (incre_cov_en) {
+            printM(cov_1, "cov n - 1");
+            printV(center_1, "center n - 1");
+        }
+
+//        if (incre_derivative_en)
+//        {
+            vector<V3D> points_old(cloud.size() - incre_points);
+            for (int i = 0; i < points_old.size(); ++i) {
+                points_old[i] = cloud[i].head(3);
+            }
+            M3D eigen_vec_old;
+            V3D eigen_values_old, center_old;
+            PCA(points_old, eigen_vec_old, eigen_values_old, center_old);
+            vector<V3D> Jpi_old;
+            derivativeEigenValue(points_old, eigen_vec_old, center_old, 0, Jpi_old);
+//        }
+
 
         M3D cov;
         V3D center;
         calcCovMatrix(cloud, cov, center);
-        printM(cov, "\ncov n");
-        printV(center, "center n");
+        if (incre_cov_en) {
+            printM(cov, "\ncov n");
+            printV(center, "center n");
+        }
 
 
         double m = cloud.size();
@@ -478,12 +497,55 @@ int main(int argc, char** argv) {
             V3D xn_mn_1 = xn - center_incre;
             cov_incre = (n - 1) / n * (cov_incre + (xn_mn_1 * xn_mn_1.transpose()) / n);
             center_incre = center_incre / n * (n - 1) + xn / n;
-        }
-        printM(cov_incre, "\ncov n incre");
-        printV(center_incre, "center_incre");
 
-        printM(cov - cov_incre, "\ncov diff");
-        printV(center - center_incre, "center diff");
+            if (incre_derivative_en)
+            {
+                printf("***** diff D lambda D point: *****\n");
+                vector<V3D> points_new = points_old;
+                points_new.push_back(xn);
+                vector<V3D> Jpi_new;
+                TicToc t_de;
+                derivativeEigenValue(points_new, eigen_vec_old, center_old, 0, Jpi_new);
+                printf("derivatie cost: %f ms\n", t_de.toc());
+
+                // incremental
+                M3D eigen_vec_new;
+                V3D eigen_values_new, center_new;
+                PCA(points_new, eigen_vec_new, eigen_values_new, center_new);
+                vector<V3D> Jpi_incre;
+                TicToc t_de_incre;
+                incrementalDeEigenValue(points_new, eigen_vec_old, center_old, Jpi_old, eigen_vec_new, Jpi_incre);
+                printf("derivatie incremental cost: %f ms\n", t_de_incre.toc());
+
+                double sum_diff_jtj = 0;
+                for (int j = 0; j < points_new.size(); ++j) {
+                    V3D diff_j = Jpi_new[j] - Jpi_incre[j];
+                    string s_j = to_string(j);
+//                    printV(Jpi_new[i], s_j + "new");
+//                    printV(Jpi_incre[i], "incre");
+                    double a = Jpi_new[j].transpose() * Jpi_new[j];
+                    double b = Jpi_incre[j].transpose() * Jpi_incre[j];
+                    double diff_jtj = a - b;
+//                    printf("point #%d diff JtJ: %f\n", j, diff_jtj);
+                    sum_diff_jtj += diff_jtj;
+                }
+                printf("sum of diff JtJ: %f\n", sum_diff_jtj);
+
+                points_old = points_new;
+                eigen_vec_old = eigen_vec_new;
+                eigen_values_old = eigen_values_new;
+                center_old = center_new;
+                Jpi_old = Jpi_incre;
+            }
+        }
+
+        if (incre_cov_en) {
+            printM(cov_incre, "\ncov n incre");
+            printV(center_incre, "center_incre");
+
+            printM(cov - cov_incre, "\ncov diff");
+            printV(center - center_incre, "center diff");
+        }
     }
 
 }
