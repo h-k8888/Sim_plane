@@ -41,6 +41,9 @@ double incident_cos_min = cos(incident_max / 180.0 * M_PI);
 double incident_cov_max, incident_cov_scale;
 
 int refine_maximum_iter;
+bool refine_normal_en, incre_cov_en;
+double incre_points = 20;
+
 
 //plane parameters
 V3D normal;
@@ -276,6 +279,9 @@ void readParams()
     incident_cov_max = tag_settting.get<double>("incident_cov_max", 0.0);
     incident_cov_scale = tag_settting.get<double>("incident_cov_scale", 0.0);
     refine_maximum_iter = tag_settting.get<int>("refine_maximum_iter", 0);
+    refine_normal_en = tag_settting.get<bool>("refine_normal_en", false);
+    incre_points = tag_settting.get<double>("incre_points", 0);
+    incre_cov_en = tag_settting.get<bool>("incre_cov_en", false);
 
     noise_type = tag_settting.get<int>("noise_type", 1);
     printf("noise_type: %d\nnormal_pert: %.3f\nrange_stddev: %.3f\nbearing_stddev_deg: %.3f\n",
@@ -397,82 +403,87 @@ int main(int argc, char** argv) {
     // to pointWithCov format
     recordCloudWithCov();
 
+    if (refine_normal_en)
     {
-        // refine normal
-        printf("\n********* refine n **********\n");
-        V3D normal_perted = pca_normal_merged;
-        perturbNormal(normal_perted);
-        V3D normal_refine_n = refineNormal(normal_perted, pointWithCov_all, centroid_merged);
-        double resudial_refine_n = point2planeResidual(cloud, centroid_merged, normal_refine_n);
-        double theta_refine_n = diff_normal(normal, normal_refine_n);
-        printf("\nrefine n\nnormal diff: %f deg\nsum residual^2: %f\n",
-               theta_refine_n / M_PI * 180.0, resudial_refine_n);
-        printf("PCA\nnormal diff: %f deg\nsum residual^2: %f\n*******************\n",
-               theta_merged / M_PI * 180.0, resudial_merged);
-    }
+        {
+            // refine normal
+            printf("\n********* refine n **********\n");
+            V3D normal_perted = pca_normal_merged;
+            perturbNormal(normal_perted);
+            V3D normal_refine_n = refineNormal(normal_perted, pointWithCov_all, centroid_merged);
+            double resudial_refine_n = point2planeResidual(cloud, centroid_merged, normal_refine_n);
+            double theta_refine_n = diff_normal(normal, normal_refine_n);
+            printf("\nrefine n\nnormal diff: %f deg\nsum residual^2: %f\n",
+                   theta_refine_n / M_PI * 180.0, resudial_refine_n);
+            printf("PCA\nnormal diff: %f deg\nsum residual^2: %f\n*******************\n",
+                   theta_merged / M_PI * 180.0, resudial_merged);
+        }
 
-    {
-        /// refine normal and d with Cov
-        printf("\n********* refine n d1 (Cov)**********\n");
-        V3D normal_refine, centroid_refine;
-        refineNormalAndCenterDWithCov(pca_normal_merged, pointWithCov_all, centroid_merged,
-                                      normal_refine, centroid_refine);
-        double resudial_merged_refine = point2planeResidual(cloud, centroid_refine, normal_refine);
-        double theta_merged_refine = diff_normal(normal, normal_refine);
-        printf("\nrefine n d1\nnormal diff: %f deg\nsum residual^2: %f\n",
-               theta_merged_refine / M_PI * 180.0,
-               resudial_merged_refine);
+        {
+            /// refine normal and d with Cov
+            printf("\n********* refine n d1 (Cov)**********\n");
+            V3D normal_refine, centroid_refine;
+            refineNormalAndCenterDWithCov(pca_normal_merged, pointWithCov_all, centroid_merged,
+                                          normal_refine, centroid_refine);
+            double resudial_merged_refine = point2planeResidual(cloud, centroid_refine, normal_refine);
+            double theta_merged_refine = diff_normal(normal, normal_refine);
+            printf("\nrefine n d1\nnormal diff: %f deg\nsum residual^2: %f\n",
+                   theta_merged_refine / M_PI * 180.0,
+                   resudial_merged_refine);
 
-        printf("PCA\nnormal diff: %f deg\nsum residual^2: %f\n*******************\n",
-               theta_merged / M_PI * 180.0, resudial_merged);
-    }
+            printf("PCA\nnormal diff: %f deg\nsum residual^2: %f\n*******************\n",
+                   theta_merged / M_PI * 180.0, resudial_merged);
+        }
 
-    {
-        /// refine normal
-        printf("\n********* refine n (Cov)**********\n");
-        V3D normal_refine_n = refineNormalWithCov(pca_normal_merged, pointWithCov_all, centroid_merged);
-        double resudial_refine_n = point2planeResidual(cloud, centroid_merged, normal_refine_n);
-        double theta_refine_n = diff_normal(normal, normal_refine_n);
-        printf("\nrefine n\nnormal diff: %f deg\nsum residual^2: %f\n",
-               theta_refine_n / M_PI * 180.0, resudial_refine_n);
+        {
+            /// refine normal
+            printf("\n********* refine n (Cov)**********\n");
+            V3D normal_refine_n = refineNormalWithCov(pca_normal_merged, pointWithCov_all, centroid_merged);
+            double resudial_refine_n = point2planeResidual(cloud, centroid_merged, normal_refine_n);
+            double theta_refine_n = diff_normal(normal, normal_refine_n);
+            printf("\nrefine n\nnormal diff: %f deg\nsum residual^2: %f\n",
+                   theta_refine_n / M_PI * 180.0, resudial_refine_n);
 
-        printf("PCA\nnormal diff: %f deg\nsum residual^2: %f\n*******************\n",
-               theta_merged / M_PI * 180.0, resudial_merged);
+            printf("PCA\nnormal diff: %f deg\nsum residual^2: %f\n*******************\n",
+                   theta_merged / M_PI * 180.0, resudial_merged);
+        }
     }
     // refine normal
 
 //    printIncidentCov();
 
     // test incremental Cov
-    int iter_points = 20;
-    M3D cov_1;
-    V3D center_1;
-    vector<V4D> cloud_1(cloud.begin(), cloud.end() - iter_points);
-    calcCovMatrix(cloud_1, cov_1, center_1);
-    printM(cov_1, "cov n - 1");
-    printV(center_1, "center n - 1");
+    if (incre_cov_en)
+    {
+        M3D cov_1;
+        V3D center_1;
+        vector<V4D> cloud_1(cloud.begin(), cloud.end() - incre_points);
+        calcCovMatrix(cloud_1, cov_1, center_1);
+        printM(cov_1, "cov n - 1");
+        printV(center_1, "center n - 1");
 
-    M3D cov;
-    V3D center;
-    calcCovMatrix(cloud, cov, center);
-    printM(cov, "\ncov n");
-    printV(center, "center n");
+        M3D cov;
+        V3D center;
+        calcCovMatrix(cloud, cov, center);
+        printM(cov, "\ncov n");
+        printV(center, "center n");
 
 
-    double m = cloud.size();
-    M3D cov_incre = cov_1;
-    V3D center_incre = center_1;
-    for (int i = cloud.size() - iter_points; i < m; ++i) {
-        double n = i + 1;
-        const V3D & xn = cloud[i].head(3);
-        V3D xn_mn_1 = xn - center_incre;
-        cov_incre = (n - 1) / n * (cov_incre + (xn_mn_1 * xn_mn_1.transpose()) / n);
-        center_incre = center_incre / n * (n - 1) + xn / n;
+        double m = cloud.size();
+        M3D cov_incre = cov_1;
+        V3D center_incre = center_1;
+        for (int i = cloud.size() - incre_points; i < m; ++i) {
+            double n = i + 1;
+            const V3D &xn = cloud[i].head(3);
+            V3D xn_mn_1 = xn - center_incre;
+            cov_incre = (n - 1) / n * (cov_incre + (xn_mn_1 * xn_mn_1.transpose()) / n);
+            center_incre = center_incre / n * (n - 1) + xn / n;
+        }
+        printM(cov_incre, "\ncov n incre");
+        printV(center_incre, "center_incre");
+
+        printM(cov - cov_incre, "\ncov diff");
+        printV(center - center_incre, "center diff");
     }
-    printM(cov_incre, "\ncov n incre");
-    printV(center_incre, "center_incre");
-
-    printM(cov - cov_incre, "\ncov diff");
-    printV(center - center_incre, "center diff");
 
 }
