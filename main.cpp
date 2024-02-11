@@ -474,8 +474,9 @@ int main(int argc, char** argv) {
             M3D eigen_vec_old;
             V3D eigen_values_old, center_old;
             PCA(points_old, eigen_vec_old, eigen_values_old, center_old);
-            vector<V3D> Jpi_old;
-            derivativeEigenValue(points_old, eigen_vec_old, center_old, 0, Jpi_old);
+//            vector<V3D> Jpi_old;
+            vector<M3D> Jpi_old;
+            derivativeEigenValue(points_old, eigen_vec_old, center_old, Jpi_old);
 //        }
 
 
@@ -503,33 +504,44 @@ int main(int argc, char** argv) {
                 printf("***** diff D lambda D point: *****\n");
                 vector<V3D> points_new = points_old;
                 points_new.push_back(xn);
-                vector<V3D> Jpi_new;
+//                vector<V3D> Jpi_new;
+                vector<M3D> Jpi_new;
                 TicToc t_de;
-                derivativeEigenValue(points_new, eigen_vec_old, center_old, 0, Jpi_new);
+                derivativeEigenValue(points_new, eigen_vec_old, center_old, Jpi_new);
                 printf("derivatie cost: %f ms\n", t_de.toc());
 
                 // incremental
                 M3D eigen_vec_new;
                 V3D eigen_values_new, center_new;
                 PCA(points_new, eigen_vec_new, eigen_values_new, center_new);
-                vector<V3D> Jpi_incre;
+//                vector<V3D> Jpi_incre;
+                vector<M3D> Jpi_incre;
                 TicToc t_de_incre;
-                incrementalDeEigenValue(points_new, eigen_vec_old, center_old, Jpi_old, eigen_vec_new, 0, Jpi_incre);
+                incrementalDeEigenValue(points_new, eigen_vec_old, center_old, Jpi_old, eigen_vec_new, Jpi_incre);
                 printf("derivatie incremental cost: %f ms\n", t_de_incre.toc());
 
-                double sum_diff_jtj = 0;
+//                double sum_diff_jtj_1 = 0;
+//                double sum_diff_jtj_2 = 0;
+//                double sum_diff_jtj_3 = 0;
+                vector<double> sum_diff_jtj(3, 0.0);
                 for (int j = 0; j < points_new.size(); ++j) {
-                    V3D diff_j = Jpi_new[j] - Jpi_incre[j];
-                    string s_j = to_string(j);
+//                    V3D diff_j = Jpi_new[j] - Jpi_incre[j];
+//                    string s_j = to_string(j);
 //                    printV(Jpi_new[i], s_j + "new");
 //                    printV(Jpi_incre[i], "incre");
-                    double a = Jpi_new[j].transpose() * Jpi_new[j];
-                    double b = Jpi_incre[j].transpose() * Jpi_incre[j];
-                    double diff_jtj = a - b;
+                    for (int k = 0; k < 3; ++k) {
+                        double a = Jpi_new[j].row(k) * Jpi_new[j].row(k).transpose() ;
+                        double b = Jpi_incre[j].row(k) * Jpi_incre[j].row(k).transpose();
+                        double diff_jtj = a - b;
+                        sum_diff_jtj[k] += diff_jtj;
+                    }
+
 //                    printf("point #%d diff JtJ: %f\n", j, diff_jtj);
-                    sum_diff_jtj += diff_jtj;
+//                    sum_diff_jtj += diff_jtj;
                 }
-                printf("sum of diff JtJ: %e\n", sum_diff_jtj);
+                for (int k = 0; k < 3; ++k) {
+                    printf("sum of diff JtJ lambda %d: %e\n", (int)k, sum_diff_jtj[k]);
+                }
 
                 points_old = points_new;
                 eigen_vec_old = eigen_vec_new;

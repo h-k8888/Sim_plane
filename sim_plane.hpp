@@ -654,17 +654,17 @@ void incrementalDeEigenValue(const vector<V3D> & points, const M3D & eigen_vecto
     double n = (double)points.size();
     const V3D & xn = points.back();
     V3D xn_mn1 = xn - center_old;
-    vector<V3D> en(3), en_1(3); // eigen vectors of n, n-1
-    vector<double> cos_en(3), cos_en_1(3), cos_theta(3);
+//    vector<V3D> en(3), en_1(3); // eigen vectors of n, n-1
+//    vector<double> cos_en(3), cos_en_1(3), cos_theta(3);
     vector<V3D> term_2(3);
     for (int i = 0; i < 3; ++i) {
-        en[i] = eigen_vectors_new.col(i); // n
-        en_1[i] = eigen_vectors_old.col(i); // n - 1
+        const V3D & en = eigen_vectors_new.col(i); // n
+        const V3D & en_1 = eigen_vectors_old.col(i); // n - 1
 
-        cos_en[i] = abs(xn_mn1.dot(en[i]));
-        cos_en_1[i] = abs(xn_mn1.dot(en_1[i]));
-        cos_theta[i] = abs(en[i].dot(en_1[i]));
-        term_2[i] =  ( cos_en[i] * en_1[i] + cos_en_1[i] * en_1[i]) / (n * n * cos_theta[i]);
+        double cos_en = abs(xn_mn1.dot(en));
+        double cos_en_1 = abs(xn_mn1.dot(en_1));
+        double cos_theta = abs(en.dot(en_1));
+        term_2[i] =  ( cos_en * en_1 + cos_en_1 * en_1) / (n * n * cos_theta);
     }
     Jpi_new.resize(points.size());
     double scale_1 = (n - 1) / n;
