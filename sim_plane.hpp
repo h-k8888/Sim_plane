@@ -605,25 +605,34 @@ void derivativeEigenValue(const vector<V3D> & points, const M3D & eigen_vectors,
     for (int i = 0; i < points.size(); ++i) {
         Jpi[i] = (points[i] - center).transpose() * tmp;
     }
-
+}
+void derivativeEigenValue(const vector<V3D> & points, const M3D & eigen_vectors,
+                          const V3D & center, vector<M3D> & Jpi)
+{
+    double n = (double)points.size();
+    Jpi.resize(points.size());
+    vector<M3D> uk_ukt(3);
+    for (int i = 0; i < 3; ++i) {
+        uk_ukt[i] = 2.0 / n * eigen_vectors.col(i) * eigen_vectors.col(i).transpose(); // 2 / n * v_k * v_k^t
+    }
+    for (int i = 0; i < points.size(); ++i) {
+        V3D center2point = points[i] - center;
+        Jpi[i].row(0) = center2point.transpose() * uk_ukt[0];
+        Jpi[i].row(1) = center2point.transpose() * uk_ukt[1];
+        Jpi[i].row(2) = center2point.transpose() * uk_ukt[2];
+    }
 }
 
-//
+// specified eigen value
 void incrementalDeEigenValue(const vector<V3D> & points, const M3D & eigen_vectors_old, const V3D & center_old,
-                             const vector<V3D> & Jpi_old, const M3D & eigen_vectors_new, vector<V3D> & Jpi_new)
+                             const vector<V3D> & Jpi_old, const M3D & eigen_vectors_new, const int& lambda_i,
+                             vector<V3D> & Jpi_new)
 {
     double n = (double)points.size();
     const V3D & xn = points.back();
     V3D xn_mn1 = xn - center_old;
-    const V3D e1 = eigen_vectors_new.col(0); // n
-//    const V3D e2 = eigen_vectors_new.col(1);
-//    const V3D e3 = eigen_vectors_new.col(2);
-    const V3D en_1 = eigen_vectors_new.col(0); // n - 1
-//    const V3D en_2 = eigen_vectors_new.col(1);
-//    const V3D en_3 = eigen_vectors_new.col(2);
-//    vector<double> cos_vectors(3); // en * en_1
-//    for (int i = 0; i < 3; ++i)
-//        cos_vectors[i] = abs(eigen_vectors_new.col(i).dot(eigen_vectors_old.col(i)));
+    const V3D e1 = eigen_vectors_new.col(lambda_i); // n
+    const V3D en_1 = eigen_vectors_new.col(lambda_i); // n - 1
 
     double cos_n = abs(xn_mn1.dot(e1));
     double cos_n_1 = abs(xn_mn1.dot(en_1));
@@ -639,4 +648,36 @@ void incrementalDeEigenValue(const vector<V3D> & points, const M3D & eigen_vecto
     Jpi_new.back() = term_2 * (n - 1);
 }
 
+void incrementalDeEigenValue(const vector<V3D> & points, const M3D & eigen_vectors_old, const V3D & center_old,
+                             const vector<M3D> & Jpi_old, const M3D & eigen_vectors_new, vector<M3D> & Jpi_new)
+{
+    double n = (double)points.size();
+    const V3D & xn = points.back();
+    V3D xn_mn1 = xn - center_old;
+    vector<V3D> en(3), en_1(3); // eigen vectors of n, n-1
+    vector<double> cos_en(3), cos_en_1(3), cos_theta(3);
+    vector<V3D> term_2(3);
+    for (int i = 0; i < 3; ++i) {
+        en[i] = eigen_vectors_new.col(i); // n
+        en_1[i] = eigen_vectors_old.col(i); // n - 1
+
+        cos_en[i] = abs(xn_mn1.dot(en[i]));
+        cos_en_1[i] = abs(xn_mn1.dot(en_1[i]));
+        cos_theta[i] = abs(en[i].dot(en_1[i]));
+        term_2[i] =  ( cos_en[i] * en_1[i] + cos_en_1[i] * en_1[i]) / (n * n * cos_theta[i]);
+    }
+    Jpi_new.resize(points.size());
+    double scale_1 = (n - 1) / n;
+//    V3D term_2 =  (cos_n * en_1 + cos_n_1 * e1) / (n * n * cos_theta);
+    for (int i = 0; i < points.size() - 1; ++i) { // i = 1, 2 ..., n-1
+        Jpi_new[i].row(0) = scale_1 * Jpi_old[i].row(0) - term_2[0].transpose(); // d lambda1 d p
+        Jpi_new[i].row(1) = scale_1 * Jpi_old[i].row(1) - term_2[1].transpose(); // d lambda2 d p
+        Jpi_new[i].row(2) = scale_1 * Jpi_old[i].row(2) - term_2[2].transpose(); // d lambda3 d p
+    }
+
+    // for i = n
+    Jpi_new.back().row(0) = term_2[0].transpose() * (n - 1); // d lambda1 d p
+    Jpi_new.back().row(1) = term_2[1].transpose() * (n - 1); // d lambda2 d p
+    Jpi_new.back().row(2) = term_2[2].transpose() * (n - 1); // d lambda3 d p
+}
 #endif //SIM_PLANE_SIM_PLANE_H

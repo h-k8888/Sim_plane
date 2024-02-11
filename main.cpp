@@ -514,7 +514,7 @@ int main(int argc, char** argv) {
                 PCA(points_new, eigen_vec_new, eigen_values_new, center_new);
                 vector<V3D> Jpi_incre;
                 TicToc t_de_incre;
-                incrementalDeEigenValue(points_new, eigen_vec_old, center_old, Jpi_old, eigen_vec_new, Jpi_incre);
+                incrementalDeEigenValue(points_new, eigen_vec_old, center_old, Jpi_old, eigen_vec_new, 0, Jpi_incre);
                 printf("derivatie incremental cost: %f ms\n", t_de_incre.toc());
 
                 double sum_diff_jtj = 0;
@@ -529,7 +529,7 @@ int main(int argc, char** argv) {
 //                    printf("point #%d diff JtJ: %f\n", j, diff_jtj);
                     sum_diff_jtj += diff_jtj;
                 }
-                printf("sum of diff JtJ: %f\n", sum_diff_jtj);
+                printf("sum of diff JtJ: %e\n", sum_diff_jtj);
 
                 points_old = points_new;
                 eigen_vec_old = eigen_vec_new;
