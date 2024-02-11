@@ -53,6 +53,7 @@ V3D b1, b2;
 string cfg_file("/home/hk/CLionProjects/Sim_plane/cfg.ini");
 
 vector<V4D> cloud, lidars;
+vector<M3D> points_cov;
 vector<vector<V4D>> cloud_per_lidar;
 vector<double> mean_incidents;
 vector<V3D> normal_per_lidar;
@@ -92,7 +93,8 @@ void generatePerturbedNormal(vector<V3D> & normals)
     }
 }
 
-void generateCloudOnPlane(const V3D & lidar, const V3D & normal_input, vector<V3D>& cloud, double & incident_out)
+void generateCloudOnPlane(const V3D & lidar, const V3D & normal_input, vector<V3D>& cloud,
+                          vector<M3D> & points_cov, double & incident_out)
 {
     std::normal_distribution<double> gaussian_plane(0.0, plane_width); //plane
     unsigned seed = std::chrono::steady_clock::now().time_since_epoch().count();
@@ -105,6 +107,7 @@ void generateCloudOnPlane(const V3D & lidar, const V3D & normal_input, vector<V3
 
     double incident = 0.0;
     cloud.resize(num_points_per_lidar);
+    points_cov.resize(num_points_per_lidar);
     for (int i = 0; i < num_points_per_lidar; ++i) {
         double xyz1 = gaussian_plane(generator);
         double xyz2 = gaussian_plane(generator);
@@ -117,24 +120,14 @@ void generateCloudOnPlane(const V3D & lidar, const V3D & normal_input, vector<V3
         double cos_incident = abs(normal.dot(ray));
         double incident_tmp = acos(cos_incident) / M_PI * 180.0;
         incident += incident_tmp / num_points_per_lidar;
+
+        points_cov[i] = calcBodyCov(ray, p2lidar, range_stddev, bearing_stddev_deg);
     }
     incident_out = incident;
 }
 
-//// ray: unit vector
-//double calcIncidentCovScale(const V3D & ray, const double & dist, const V3D& normal)
-//{
-////    static double angle_rad = DEG2RAD(angle_cov);
-//    double cos_incident = abs(normal.dot(ray));
-//    cos_incident = max(cos_incident, incident_cos_min);
-//    double sin_incident = sqrt(1 - cos_incident * cos_incident);
-////    return dist * sin_incident / cos_incident * bearing_stddev; // range * tan(incident) * sigma_angle
-//    double sigma_a = dist * sin_incident / cos_incident * bearing_stddev; // range * tan(incident) * sigma_angle
-//    return min(incident_cov_max, incident_cov_scale * sigma_a * sigma_a); // scale * sigma_a^2
-//}
-
 void generateCloudOnPlaneWithRangeBearing(const V3D & lidar, const V3D & normal_input, vector<V3D>& cloud,
-                                          double & incident_out)
+                                          vector<M3D> & points_cov, double & incident_out)
 {
     std::normal_distribution<double> gaussian_plane(0.0, plane_width); //plane
     unsigned seed = std::chrono::steady_clock::now().time_since_epoch().count();
@@ -146,6 +139,7 @@ void generateCloudOnPlaneWithRangeBearing(const V3D & lidar, const V3D & normal_
     findLocalTangentBases(normal_input, b1_tmp, b2_tmp);
 
     cloud.resize(num_points_per_lidar);
+    points_cov.resize(num_points_per_lidar);
     double incident = 0.0;
     for (int i = 0; i < num_points_per_lidar; ++i) {
         double xyz1 = gaussian_plane(generator);
@@ -162,6 +156,8 @@ void generateCloudOnPlaneWithRangeBearing(const V3D & lidar, const V3D & normal_
         double cos_incident = abs(normal.dot(ray));
         double incident_tmp = acos(cos_incident) / M_PI * 180.0;
         incident += incident_tmp / num_points_per_lidar;
+
+        points_cov[i] = calcBodyCov(ray, p2lidar, range_stddev, bearing_stddev_deg);
 
         double range_cov = range_stddev * range_stddev;
         if (noise_type == 3) {
@@ -200,7 +196,8 @@ void generateLidar(vector<V3D>& lidars)
 }
 
 void recordLidarID(const vector<V3D> & lidars_tmp, const vector<vector<V3D>> cloud_per_lidar_tmp,
-                   vector<V4D>& cloud, vector<V4D>& lidars, vector<vector<V4D>> & cloud_per_lidar)
+                   const vector<vector<M3D>> points_cov_tmp, vector<V4D>& cloud, vector<V4D>& lidars,
+                   vector<M3D>& points_cov, vector<vector<V4D>> & cloud_per_lidar)
 {
     cloud.clear();
     cloud_per_lidar.resize(num_lidar);
@@ -216,6 +213,10 @@ void recordLidarID(const vector<V3D> & lidars_tmp, const vector<vector<V3D>> clo
             cloud_i[j](3) = lidar_id;
         }
         cloud.insert(cloud.end(), cloud_i.begin(), cloud_i.end());
+
+        const vector<M3D> & cov_i = points_cov_tmp[lidar_id];
+        points_cov.insert(points_cov.end(), cov_i.begin(), cov_i.end());
+
     }
 }
 
@@ -229,11 +230,14 @@ void cloud2lidar()
 
     mean_incidents.resize(num_lidar);
     vector<vector<V3D>> cloud_per_lidar_tmp(num_lidar);
+    vector<vector<M3D>> points_cov_tmp(num_lidar);
     for (int i = 0; i < num_lidar; ++i) {
-        generateCloudOnPlane(lidars_tmp[i], normal_per_lidar[i], cloud_per_lidar_tmp[i], mean_incidents[i]);
+        generateCloudOnPlane(lidars_tmp[i], normal_per_lidar[i], cloud_per_lidar_tmp[i],
+                             points_cov_tmp[i], mean_incidents[i]);
     }
 
-    recordLidarID(lidars_tmp, cloud_per_lidar_tmp, cloud, lidars, cloud_per_lidar);
+    recordLidarID(lidars_tmp, cloud_per_lidar_tmp, points_cov_tmp,
+                  cloud, lidars, points_cov, cloud_per_lidar);
 }
 
 void cloud2lidarWithRangeAndBearing()
@@ -246,11 +250,14 @@ void cloud2lidarWithRangeAndBearing()
 
     vector<vector<V3D>> cloud_per_lidar_tmp(num_lidar);
     mean_incidents.resize(num_lidar);
+    vector<vector<M3D>> points_cov_tmp(num_lidar); // todo
     for (int i = 0; i < num_lidar; ++i) {
-        generateCloudOnPlaneWithRangeBearing(lidars_tmp[i], normal_per_lidar[i], cloud_per_lidar_tmp[i], mean_incidents[i]);
+        generateCloudOnPlaneWithRangeBearing(lidars_tmp[i], normal_per_lidar[i], cloud_per_lidar_tmp[i],
+                                             points_cov_tmp[i], mean_incidents[i]);
     }
 
-    recordLidarID(lidars_tmp, cloud_per_lidar_tmp, cloud, lidars, cloud_per_lidar);
+    recordLidarID(lidars_tmp, cloud_per_lidar_tmp, points_cov_tmp,
+                  cloud, lidars, points_cov, cloud_per_lidar);
 }
 
 void readParams()
@@ -361,7 +368,7 @@ int main(int argc, char** argv) {
         }
         case 3:
         {
-            printf("***noise: range, bearing, invident and roughness.***\n");
+            printf("***noise: range, bearing, incident and roughness.***\n");
             cloud2lidarWithRangeAndBearing();
             break;
         }
@@ -465,19 +472,23 @@ int main(int argc, char** argv) {
             printV(center_1, "center n - 1");
         }
 
-//        if (incre_derivative_en)
-//        {
-            vector<V3D> points_old(cloud.size() - incre_points);
-            for (int i = 0; i < points_old.size(); ++i) {
-                points_old[i] = cloud[i].head(3);
-            }
-            M3D eigen_vec_old;
-            V3D eigen_values_old, center_old;
-            PCA(points_old, eigen_vec_old, eigen_values_old, center_old);
+
+        // set variance before iterative
+        vector<V3D> points_old(cloud.size() - incre_points);
+        printf("points_cov.size() %d", (int)points_cov.size());
+        vector<M3D> points_cov_old(points_cov.size() - incre_points);
+        for (int i = 0; i < points_old.size(); ++i) {
+            points_old[i] = cloud[i].head(3);
+            points_cov_old[i] = points_cov[i];
+        }
+        M3D eigen_vec_old;
+        V3D eigen_values_old, center_old;
+        PCA(points_old, eigen_vec_old, eigen_values_old, center_old);
 //            vector<V3D> Jpi_old;
-            vector<M3D> Jpi_old;
-            derivativeEigenValue(points_old, eigen_vec_old, center_old, Jpi_old);
-//        }
+        vector<M3D> Jpi_old;
+        vector<double> lambda_cov_old;
+        derivativeEigenValue(points_old, eigen_vec_old, center_old, Jpi_old);
+        calcLambdaCov(points_cov_old, Jpi_old, lambda_cov_old);
 
 
         M3D cov;
@@ -495,20 +506,27 @@ int main(int argc, char** argv) {
         for (int i = cloud.size() - incre_points; i < m; ++i) {
             double n = i + 1;
             const V3D &xn = cloud[i].head(3);
+            const M3D & point_cov_i = points_cov[i];
             V3D xn_mn_1 = xn - center_incre;
             cov_incre = (n - 1) / n * (cov_incre + (xn_mn_1 * xn_mn_1.transpose()) / n);
             center_incre = center_incre / n * (n - 1) + xn / n;
 
             if (incre_derivative_en)
             {
-                printf("***** diff D lambda D point: *****\n");
+                printf("\n***** add point #%d *****\n", i);
                 vector<V3D> points_new = points_old;
                 points_new.push_back(xn);
+                vector<M3D> points_cov_new = points_cov_old;
+                points_cov_new.push_back(point_cov_i);
 //                vector<V3D> Jpi_new;
                 vector<M3D> Jpi_new;
+                vector<double> lambda_cov_new;
                 TicToc t_de;
                 derivativeEigenValue(points_new, eigen_vec_old, center_old, Jpi_new);
-                printf("derivatie cost: %f ms\n", t_de.toc());
+                // compute lambda cov
+                calcLambdaCov(points_cov_new, Jpi_new, lambda_cov_new);
+                printf("derivatie & cov cost: %f ms\n", t_de.toc());
+
 
                 // incremental
                 M3D eigen_vec_new;
@@ -516,9 +534,11 @@ int main(int argc, char** argv) {
                 PCA(points_new, eigen_vec_new, eigen_values_new, center_new);
 //                vector<V3D> Jpi_incre;
                 vector<M3D> Jpi_incre;
+                vector<double> lambda_cov_incre;
                 TicToc t_de_incre;
                 incrementalDeEigenValue(points_new, eigen_vec_old, center_old, Jpi_old, eigen_vec_new, Jpi_incre);
-                printf("derivatie incremental cost: %f ms\n", t_de_incre.toc());
+                calcLambdaCovIncremental(points_cov_new, Jpi_new, lambda_cov_old, lambda_cov_incre);
+                printf("incremental derivatie & cov cost: %f ms\n", t_de_incre.toc());
 
 //                double sum_diff_jtj_1 = 0;
 //                double sum_diff_jtj_2 = 0;
@@ -540,14 +560,20 @@ int main(int argc, char** argv) {
 //                    sum_diff_jtj += diff_jtj;
                 }
                 for (int k = 0; k < 3; ++k) {
-                    printf("sum of diff JtJ lambda %d: %e\n", (int)k, sum_diff_jtj[k]);
+                    printf("sum of diff JtJ(cov I) lambda %d: %e\n", (int)k, sum_diff_jtj[k]);
+                }
+                for (int k = 0; k < 3; ++k) {
+                    printf("diff lambda cov %d: %e\n", (int)k,
+                           lambda_cov_incre[k] - lambda_cov_old[k]);
                 }
 
                 points_old = points_new;
+                points_cov_old = points_cov_new;
                 eigen_vec_old = eigen_vec_new;
                 eigen_values_old = eigen_values_new;
                 center_old = center_new;
                 Jpi_old = Jpi_incre;
+                lambda_cov_old = lambda_cov_incre; // todo check
             }
         }
 

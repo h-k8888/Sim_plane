@@ -50,6 +50,29 @@ double calcIncidentCovScale(const V3D & ray, const double & dist, const V3D& nor
     return min(incident_cov_max, incident_cov_scale * sigma_a * sigma_a); // scale * sigma_a^2
 }
 
+
+M3D calcBodyCov(Eigen::Vector3d &pb, const float range_inc, const float degree_inc) {
+    float range = sqrt(pb[0] * pb[0] + pb[1] * pb[1] + pb[2] * pb[2]);
+    float range_var = range_inc * range_inc;
+    float tangent_var = pow(DEG2RAD(degree_inc), 2) * range * range; // d^2 * sigma^2
+
+    Eigen::Vector3d direction(pb);
+    direction.normalize();
+    M3D rrt = direction * direction.transpose(); // ray * ray^t
+    return range_var * rrt + tangent_var * (Eigen::Matrix3d::Identity() - rrt);
+}
+
+M3D calcBodyCov(const Eigen::Vector3d &ray, const double & range, const float range_inc, const float degree_inc) {
+    float range_var = range_inc * range_inc;
+    float tangent_var = pow(DEG2RAD(degree_inc), 2) * range * range; // d^2 * sigma^2
+
+    Eigen::Vector3d direction(ray);
+    direction.normalize();
+    M3D rrt = direction * direction.transpose(); // ray * ray^t
+    return range_var * rrt + tangent_var * (Eigen::Matrix3d::Identity() - rrt);
+}
+
+
 // 3D point with covariance
 typedef struct pointWithCov {
     Eigen::Vector3d point;
@@ -615,11 +638,16 @@ void derivativeEigenValue(const vector<V3D> & points, const M3D & eigen_vectors,
     for (int i = 0; i < 3; ++i) {
         uk_ukt[i] = 2.0 / n * eigen_vectors.col(i) * eigen_vectors.col(i).transpose(); // 2 / n * v_k * v_k^t
     }
+    double cov_lambda1 = 0, cov_lambda2 = 0, cov_lambda3 = 0;
     for (int i = 0; i < points.size(); ++i) {
         V3D center2point = points[i] - center;
         Jpi[i].row(0) = center2point.transpose() * uk_ukt[0];
         Jpi[i].row(1) = center2point.transpose() * uk_ukt[1];
         Jpi[i].row(2) = center2point.transpose() * uk_ukt[2];
+
+        cov_lambda1 += Jpi[i].row(0) * M3D::Identity() * Jpi[i].row(0).transpose();
+        cov_lambda2 += Jpi[i].row(1) * M3D::Identity() * Jpi[i].row(1).transpose();
+        cov_lambda3 += Jpi[i].row(2) * M3D::Identity() * Jpi[i].row(2).transpose();
     }
 }
 
@@ -657,14 +685,16 @@ void incrementalDeEigenValue(const vector<V3D> & points, const M3D & eigen_vecto
 //    vector<V3D> en(3), en_1(3); // eigen vectors of n, n-1
 //    vector<double> cos_en(3), cos_en_1(3), cos_theta(3);
     vector<V3D> term_2(3);
+//    printf("derivative increment:\n");
     for (int i = 0; i < 3; ++i) {
         const V3D & en = eigen_vectors_new.col(i); // n
         const V3D & en_1 = eigen_vectors_old.col(i); // n - 1
 
-        double cos_en = abs(xn_mn1.dot(en));
+        double cos_en = abs(xn_mn1.dot(en)); // d * mx_mn1
         double cos_en_1 = abs(xn_mn1.dot(en_1));
         double cos_theta = abs(en.dot(en_1));
         term_2[i] =  ( cos_en * en_1 + cos_en_1 * en_1) / (n * n * cos_theta);
+//        printf("lambda %d: %e %e %e\n", i + 1, term_2[i](0), term_2[i](1), term_2[i](2));
     }
     Jpi_new.resize(points.size());
     double scale_1 = (n - 1) / n;
@@ -680,4 +710,32 @@ void incrementalDeEigenValue(const vector<V3D> & points, const M3D & eigen_vecto
     Jpi_new.back().row(1) = term_2[1].transpose() * (n - 1); // d lambda2 d p
     Jpi_new.back().row(2) = term_2[2].transpose() * (n - 1); // d lambda3 d p
 }
+
+void calcLambdaCov(const vector<M3D> & points_cov, const vector<M3D> & Jpi, vector<double> & lambda_cov)
+{
+    assert(points_cov.size() == Jpi.size());
+    lambda_cov.resize(3, 0.0);
+    for (int i = 0; i < points_cov.size(); ++i) {
+        lambda_cov[0] += Jpi[i].row(0) * points_cov[i] * Jpi[i].row(0).transpose();
+        lambda_cov[1] += Jpi[i].row(1) * points_cov[i] * Jpi[i].row(1).transpose();
+        lambda_cov[2] += Jpi[i].row(2) * points_cov[i] * Jpi[i].row(2).transpose();
+    }
+}
+
+void calcLambdaCovIncremental(const vector<M3D> & points_cov, const vector<M3D> & Jpi,
+                              vector<double> & lambda_cov_old, vector<double> & lambda_cov_incre)
+{
+    assert(points_cov.size() == Jpi.size());
+
+    lambda_cov_incre.resize(3);
+    double n = (double)points_cov.size();
+    double scale = pow((n - 1.0), 2) / (n * n);
+    for (int i = 0; i < 3; ++i) {
+//        const M3D & point_cov = points_cov.back();
+//        const M3D & point_cov = points_cov.back();
+        lambda_cov_incre[i] = lambda_cov_old[i] * scale +
+                Jpi.back().row(i) * points_cov.back() * Jpi.back().row(i).transpose();
+    }
+}
+
 #endif //SIM_PLANE_SIM_PLANE_H
