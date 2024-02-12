@@ -310,7 +310,6 @@ void readParams()
     normal_per_lidar.resize(num_lidar);
 }
 
-// todo record as type pointWithCov
 void recordPWC(const vector<V4D>& cloud_input, const V3D & n, const V4D & lidar, vector<pointWithCov> & cloud_out)
 {
     cloud_out.resize(cloud_input.size());
@@ -392,12 +391,12 @@ int main(int argc, char** argv) {
     string file_cloud_lidar("/tmp/cloud_lidar");
     saveCloud(cloud_per_lidar, file_cloud_lidar);
 
-    // do PCA per lidar
+    // do PCASelfAdjoint per lidar
     vector<M3D> eigen_vectors(num_lidar);
     vector<V3D> eigen_values(num_lidar), centroids(num_lidar);
     for (int i = 0; i < num_lidar; ++i) {
         printf("lidar #%d\n", i);
-        PCA(cloud_per_lidar[i], eigen_vectors[i], eigen_values[i], centroids[i]);
+        PCASelfAdjoint(cloud_per_lidar[i], eigen_vectors[i], eigen_values[i], centroids[i]);
         double resudial = point2planeResidual(cloud_per_lidar[i], centroids[i], eigen_vectors[i].col(0));
         double theta = diff_normal(normal, eigen_vectors[i].col(0));
         printf("mean_incident: %f\nnormal diff= %f deg\nsum residual^2: %f\n\n",
@@ -406,10 +405,10 @@ int main(int argc, char** argv) {
 
     M3D eigen_vectors_merged;
     V3D eigen_values_merged, centroid_merged;
-    PCA(cloud, eigen_vectors_merged, eigen_values_merged, centroid_merged);
+    PCASelfAdjoint(cloud, eigen_vectors_merged, eigen_values_merged, centroid_merged);
     double resudial_merged = point2planeResidual(cloud, centroid_merged, eigen_vectors_merged.col(0));
     double theta_merged = diff_normal(normal,eigen_vectors_merged.col(0));
-    printf("\n****** PCA **********\ncloud merged\nnormal diff: %f deg\nsum residual^2: %f\n*******\n",
+    printf("\n****** PCA SelfAdjoint **********\ncloud merged\nnormal diff: %f deg\nsum residual^2: %f\n*******\n",
            theta_merged / M_PI * 180.0, resudial_merged);
 
     V3D pca_normal_merged = eigen_vectors_merged.col(0);
@@ -428,7 +427,7 @@ int main(int argc, char** argv) {
             double theta_refine_n = diff_normal(normal, normal_refine_n);
             printf("\nrefine n\nnormal diff: %f deg\nsum residual^2: %f\n",
                    theta_refine_n / M_PI * 180.0, resudial_refine_n);
-            printf("PCA\nnormal diff: %f deg\nsum residual^2: %f\n*******************\n",
+            printf("PCA SelfAdjoint\nnormal diff: %f deg\nsum residual^2: %f\n*******************\n",
                    theta_merged / M_PI * 180.0, resudial_merged);
         }
 
@@ -444,7 +443,7 @@ int main(int argc, char** argv) {
                    theta_merged_refine / M_PI * 180.0,
                    resudial_merged_refine);
 
-            printf("PCA\nnormal diff: %f deg\nsum residual^2: %f\n*******************\n",
+            printf("PCA SelfAdjoint\nnormal diff: %f deg\nsum residual^2: %f\n*******************\n",
                    theta_merged / M_PI * 180.0, resudial_merged);
         }
 
@@ -457,7 +456,7 @@ int main(int argc, char** argv) {
             printf("\nrefine n\nnormal diff: %f deg\nsum residual^2: %f\n",
                    theta_refine_n / M_PI * 180.0, resudial_refine_n);
 
-            printf("PCA\nnormal diff: %f deg\nsum residual^2: %f\n*******************\n",
+            printf("PCA SelfAdjoint\nnormal diff: %f deg\nsum residual^2: %f\n*******************\n",
                    theta_merged / M_PI * 180.0, resudial_merged);
         }
     }
@@ -487,7 +486,7 @@ int main(int argc, char** argv) {
         }
         M3D eigen_vec_old;
         V3D eigen_values_old, center_old;
-        PCA(points_old, eigen_vec_old, eigen_values_old, center_old);
+        PCASelfAdjoint(points_old, eigen_vec_old, eigen_values_old, center_old);
 //            vector<V3D> Jpi_old;
         vector<M3D> Jpi_old;
         vector<double> lambda_cov_old;
@@ -528,10 +527,12 @@ int main(int argc, char** argv) {
                 points_cov_new.push_back(point_cov_i);
                 vector<M3D> points_cov_I(points_new.size(), M3D::Identity()); // for test
 
-                /// PCA for all new points
+                /// PCA SelfAdjoint for all new points
                 M3D eigen_vec_new;
                 V3D eigen_values_new, center_new;
-                PCA(points_new, eigen_vec_new, eigen_values_new, center_new);
+//                PCASelfAdjoint(points_new, eigen_vec_new, eigen_values_new, center_new);
+                PCASelfAdjoint(cov_incre, eigen_vec_new, eigen_values_new);
+                center_new = center_incre;
 
                 /// standardized formula for calculating lambda covariance
 //                vector<V3D> Jpi_new;
@@ -584,7 +585,7 @@ int main(int argc, char** argv) {
                 eigen_values_old = eigen_values_new;
                 center_old = center_new;
 //                Jpi_old = Jpi_incre;
-                lambda_cov_old = lambda_cov_incre; // todo check
+                lambda_cov_old = lambda_cov_incre;
                 lambda_cov_I_old = lambda_cov_I_incre;
             }
         }

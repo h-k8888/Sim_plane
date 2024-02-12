@@ -128,9 +128,26 @@ void calcCovMatrix(const vector<V4D>& points, M3D & covariance, V3D & center)
     calcCovMatrix(cloud, covariance, center);
 }
 
+// PCA Self Adjoint Eigen Solver
+void PCASelfAdjoint(const M3D & covariance, M3D & eigen_vectors, V3D & eigen_values)
+{
+    TicToc t_start;
+    Eigen::SelfAdjointEigenSolver<M3D> saes(covariance);
+    eigen_vectors = saes.eigenvectors();
+    eigen_values = saes.eigenvalues(); // lambda_0 < lambda_1 < lambda_2
 
-// PCA
-void PCA(const vector<V3D>& points, M3D & eigen_vectors, V3D & eigen_values, V3D & center)
+    const double evals_min = eigen_values(0);
+    const double evals_mid = eigen_values(1);
+    const double evals_max = eigen_values(2);
+    V3D eigen_normal = eigen_vectors.col(0);
+    V3D eigen_v_mid = eigen_vectors.col(1);
+    V3D eigen_v_max = eigen_vectors.col(2);
+
+    double t_cost = t_start.toc();
+}
+
+// PCASelfAdjoint
+void PCASelfAdjoint(const vector<V3D>& points, M3D & eigen_vectors, V3D & eigen_values, V3D & center)
 {
     TicToc t_start;
 //    plane_cov = Eigen::Matrix<double, 6, 6>::Zero();
@@ -160,20 +177,112 @@ void PCA(const vector<V3D>& points, M3D & eigen_vectors, V3D & eigen_values, V3D
     V3D eigen_v_max = eigen_vectors.col(2);
 
     double t_cost = t_start.toc();
-//    printV(eigen_normal, "PCA normal");
-//    printf("PCA cost: %.6fms\n", t_cost);
-
+//    printV(eigen_normal, "PCASelfAdjoint normal");
+//    printf("PCASelfAdjoint cost: %.6fms\n", t_cost);
 }
 
-void PCA(const vector<V4D>& points, M3D & eigen_vectors, V3D & eigen_values, V3D & center)
+void PCASelfAdjoint(const vector<V4D>& points, M3D & eigen_vectors, V3D & eigen_values, V3D & center)
 {
     vector<V3D> cloud(points.size());
     for (int i = 0; i < points.size(); ++i) {
         cloud[i] = points[i].head(3);
     }
-    PCA(cloud, eigen_vectors, eigen_values, center);
+    PCASelfAdjoint(cloud, eigen_vectors, eigen_values, center);
 }
 
+// PCAEigenSolver
+void PCAEigenSolver(const vector<V3D>& points, M3D & eigen_vectors, V3D & eigen_values, V3D & center)
+{
+    TicToc t_start;
+    Eigen::Matrix<double, 6, 6> plane_cov = Eigen::Matrix<double, 6, 6>::Zero();
+    M3D covariance = Eigen::Matrix3d::Zero();
+    center = Eigen::Vector3d::Zero();
+    V3D normal = Eigen::Vector3d::Zero();
+
+    int points_size = points.size();
+
+    for (int i = 0; i < points_size; ++i) {
+        const V3D& pv = points[i];
+        covariance += pv * pv.transpose();
+        center += pv;
+    }
+    center = center / points_size;
+    covariance = covariance / points_size - center * center.transpose();
+
+    Eigen::EigenSolver<Eigen::Matrix3d> es(covariance);
+    Eigen::Matrix3cd evecs = es.eigenvectors();
+    Eigen::Vector3cd evals = es.eigenvalues();
+    Eigen::Vector3d evalsReal;
+    evalsReal = evals.real();
+    Eigen::Matrix3f::Index evalsMin, evalsMax;
+    evalsReal.rowwise().sum().minCoeff(&evalsMin);
+    evalsReal.rowwise().sum().maxCoeff(&evalsMax);
+    int evalsMid = 3 - evalsMin - evalsMax;
+    Eigen::Vector3d evecMin = evecs.real().col(evalsMin);
+    Eigen::Vector3d evecMid = evecs.real().col(evalsMid);
+    Eigen::Vector3d evecMax = evecs.real().col(evalsMax);
+
+    Eigen::Matrix3d J_Q;
+    J_Q << 1.0 / points_size, 0, 0, 0, 1.0 / points_size, 0, 0, 0,
+            1.0 / points_size;
+//    if (evalsReal(evalsMin) < 0.1) {
+
+//        plane->normal << evecs.real()(0, evalsMin), evecs.real()(1, evalsMin),
+//                evecs.real()(2, evalsMin);
+//        double t3 = omp_get_wtime();
+        std::vector<int> index(points.size());
+        std::vector<Eigen::Matrix<double, 6, 6>> temp_matrix(points.size());
+        for (int i = 0; i < points.size(); i++) {
+            Eigen::Matrix<double, 6, 3> J;
+            Eigen::Matrix3d F;
+            for (int m = 0; m < 3; m++) {
+                if (m != (int)evalsMin) {
+                    Eigen::Matrix<double, 1, 3> F_m =
+                            (points[i] - center).transpose() /
+                            ((points_size) * (evalsReal[evalsMin] - evalsReal[m])) *
+                            (evecs.real().col(m) * evecs.real().col(evalsMin).transpose() +
+                             evecs.real().col(evalsMin) * evecs.real().col(m).transpose());
+                    F.row(m) = F_m;
+                } else {
+                    Eigen::Matrix<double, 1, 3> F_m;
+                    F_m << 0, 0, 0;
+                    F.row(m) = F_m;
+                }
+            }
+            J.block<3, 3>(0, 0) = evecs.real() * F;
+            J.block<3, 3>(3, 0) = J_Q;
+
+//        plane_cov += J * points[i].cov * J.transpose();
+        plane_cov += J * M3D::Identity() * J.transpose();
+//            const pointWithCov & pv = points[i];
+//            double cos_theta = abs(plane->normal.dot(pv.normal.cast<double>())); // [0, 1.0]
+////        double sin_theta2 = 1 - cos_theta * cos_theta;
+//            double roughness = (1 - cos_theta) * roughness_cov_scale;
+//            M3D point_cov = pv.cov + roughness * M3D::Identity() +
+//                            calcIncidentCovScale(pv.ray, pv.p2lidar,  plane->normal) * pv.ray * pv.ray.transpose();
+//            plane->plane_cov += J * point_cov * J.transpose();
+        }
+
+    const double evals_min = eigen_values(0);
+    const double evals_mid = eigen_values(1);
+    const double evals_max = eigen_values(2);
+    V3D eigen_normal = eigen_vectors.col(0);
+    V3D eigen_v_mid = eigen_vectors.col(1);
+    V3D eigen_v_max = eigen_vectors.col(2);
+
+    double t_cost = t_start.toc();
+//    printV(eigen_normal, "PCASelfAdjoint normal");
+//    printf("PCASelfAdjoint cost: %.6fms\n", t_cost);
+}
+
+void PCAEigenSolver(const vector<V4D>& points, M3D & eigen_vectors, V3D & eigen_values, V3D & center)
+{
+    vector<V3D> cloud(points.size());
+    for (int i = 0; i < points.size(); ++i) {
+        cloud[i] = points[i].head(3);
+    }
+    PCAEigenSolver(cloud, eigen_vectors, eigen_values, center);
+}
 
 void saveCloud(const vector<V4D> & cloud, string& file)
 {
