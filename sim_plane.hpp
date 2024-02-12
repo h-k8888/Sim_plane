@@ -620,7 +620,7 @@ void printIncidentCov()
 
 void calcLambdaCov(const vector<M3D> & points_cov, const vector<M3D> & Jpi, vector<double> & lambda_cov)
 {
-    assert(points_cov.size() == Jpi.size());
+//    assert(points_cov.size() == Jpi.size());
     lambda_cov.resize(3, 0.0);
     for (int i = 0; i < points_cov.size(); ++i) {
         lambda_cov[0] += Jpi[i].row(0) * points_cov[i] * Jpi[i].row(0).transpose();
@@ -632,8 +632,7 @@ void calcLambdaCov(const vector<M3D> & points_cov, const vector<M3D> & Jpi, vect
 void calcLambdaCovIncremental(const vector<M3D> & points_cov, const vector<M3D> & Jpi,
                               vector<double> & lambda_cov_old, vector<double> & lambda_cov_incre)
 {
-    assert(points_cov.size() == Jpi.size());
-
+//    assert(points_cov.size() == Jpi.size());
     lambda_cov_incre.resize(3);
     double n = (double)points_cov.size();
     double scale = pow((n - 1.0), 2) / (n * n); //^2
@@ -657,8 +656,8 @@ void derivativeEigenValue(const vector<V3D> & points, const M3D & eigen_vectors,
         Jpi[i] = (points[i] - center).transpose() * tmp;
     }
 }
-void derivativeEigenValue(const vector<V3D> & points, const M3D & eigen_vectors,
-                          const V3D & center, vector<M3D> & Jpi)
+void JacobianLambda(const vector<V3D> & points, const M3D & eigen_vectors,
+                    const V3D & center, vector<M3D> & Jpi)
 {
     double n = (double)points.size();
     Jpi.resize(points.size());
@@ -705,11 +704,10 @@ void incrementalDeEigenValue(const vector<V3D> & points, const M3D & eigen_vecto
 }
 
 // return whether the update is incremental
-bool incrementalDeEigenValue(const vector<V3D> & points, const M3D & eigen_vectors_old, const V3D & center_old,
-                             const vector<M3D> & Jpi_old, const M3D & eigen_vectors_new, const V3D & center_new,
-                             vector<M3D> & Jpi_incre)
+bool incrementalJacobianLambda(const vector<V3D> & points, const M3D & eigen_vectors_old, const V3D & center_old,
+                               const M3D & eigen_vectors_new, const V3D & center_new, vector<M3D> & Jpi_incre)
 {
-    assert(points.size() == Jpi_old.size() + 1);
+//    assert(points.size() == Jpi_old.size() + 1);
     double n = (double)points.size();
     const V3D & xn = points.back();
     V3D xn_mn1 = xn - center_old;
@@ -727,26 +725,26 @@ bool incrementalDeEigenValue(const vector<V3D> & points, const M3D & eigen_vecto
         term_2[i] =  ( cos_en * en_1 + cos_en_1 * en_1) / (n * n * cos_theta);
 //        printf("lambda increment term %d: %e %e %e\n", i + 1, term_2[i](0), term_2[i](1), term_2[i](2));
     }
-    Jpi_incre.resize(points.size());
+//    Jpi_incre.resize(points.size());
     double scale_1 = (n - 1) / n;
-//    if (term_2[0].norm() > lambda_cov_threshold) {
-//        derivativeEigenValue(points, eigen_vectors_new, center_new, Jpi_new);
-        for (int i = 0; i < points.size() - 1; ++i) { // i = 1, 2 ..., n-1
-            Jpi_incre[i].row(0) = scale_1 * Jpi_old[i].row(0) - term_2[0].transpose(); // d lambda1 d p
-            Jpi_incre[i].row(1) = scale_1 * Jpi_old[i].row(1) - term_2[1].transpose(); // d lambda2 d p
-            Jpi_incre[i].row(2) = scale_1 * Jpi_old[i].row(2) - term_2[2].transpose(); // d lambda3 d p
-        }
-//    printf("lambda increment term last");
-
-//    }
-//    else {
-//        Jpi_new.resize(1);
+    if (term_2[0].norm() > lambda_cov_threshold)
+    { //todo
+        JacobianLambda(points, eigen_vectors_new, center_new, Jpi_incre);
+//        for (int i = 0; i < points.size() - 1; ++i) { // i = 1, 2 ..., n-1
+//            Jpi_incre[i].row(0) = scale_1 * Jpi_old[i].row(0) - term_2[0].transpose(); // d lambda1 d p
+//            Jpi_incre[i].row(1) = scale_1 * Jpi_old[i].row(1) - term_2[1].transpose(); // d lambda2 d p
+//            Jpi_incre[i].row(2) = scale_1 * Jpi_old[i].row(2) - term_2[2].transpose(); // d lambda3 d p
+//        }
+        return false;
+    }
+    else {
+        Jpi_incre.resize(1);
         // for i = n
-    Jpi_incre.back().row(0) = term_2[0].transpose() * (n - 1); // d lambda1 d p
-    Jpi_incre.back().row(1) = term_2[1].transpose() * (n - 1); // d lambda2 d p
-    Jpi_incre.back().row(2) = term_2[2].transpose() * (n - 1); // d lambda3 d p
-    return false;
-//    }
+        Jpi_incre.back().row(0) = term_2[0].transpose() * (n - 1); // d lambda1 d p
+        Jpi_incre.back().row(1) = term_2[1].transpose() * (n - 1); // d lambda2 d p
+        Jpi_incre.back().row(2) = term_2[2].transpose() * (n - 1); // d lambda3 d p
+        return true;
+    }
 }
 
 

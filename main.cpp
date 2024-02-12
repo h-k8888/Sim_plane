@@ -491,9 +491,13 @@ int main(int argc, char** argv) {
 //            vector<V3D> Jpi_old;
         vector<M3D> Jpi_old;
         vector<double> lambda_cov_old;
-        derivativeEigenValue(points_old, eigen_vec_old, center_old, Jpi_old);
+        JacobianLambda(points_old, eigen_vec_old, center_old, Jpi_old);
         calcLambdaCov(points_cov_old, Jpi_old, lambda_cov_old);
 
+        // indentity for test
+        vector<M3D> points_cov_I_old(points_old.size(), M3D::Identity());
+        vector<double> lambda_cov_I_old;
+        calcLambdaCov(points_cov_I_old, Jpi_old, lambda_cov_I_old);
 
         M3D cov;
         V3D center;
@@ -522,8 +526,9 @@ int main(int argc, char** argv) {
                 points_new.push_back(xn);
                 vector<M3D> points_cov_new = points_cov_old;
                 points_cov_new.push_back(point_cov_i);
+                vector<M3D> points_cov_I(points_new.size(), M3D::Identity()); // for test
 
-                /// PCA
+                /// PCA for all new points
                 M3D eigen_vec_new;
                 V3D eigen_values_new, center_new;
                 PCA(points_new, eigen_vec_new, eigen_values_new, center_new);
@@ -533,47 +538,43 @@ int main(int argc, char** argv) {
                 vector<M3D> Jpi_new;
                 vector<double> lambda_cov_new;
                 TicToc t_de;
-                derivativeEigenValue(points_new, eigen_vec_new, center_new, Jpi_new);
+                JacobianLambda(points_new, eigen_vec_new, center_new, Jpi_new);
                 // compute lambda cov
                 calcLambdaCov(points_cov_new, Jpi_new, lambda_cov_new);
                 printf("standard derivatie & cov cost: %f ms\n", t_de.toc());
+                // cov as I for test only
+                vector<double> lambda_cov_I_new;
+                calcLambdaCov(points_cov_I, Jpi_new, lambda_cov_I_new); // in fact, JtJ
 
                 // incremental
 //                vector<V3D> Jpi_incre;
                 vector<M3D> Jpi_incre;
                 vector<double> lambda_cov_incre;
+                vector<double> lambda_cov_I_incre;
                 TicToc t_de_incre;
-                incrementalDeEigenValue(points_new, eigen_vec_old, center_old, Jpi_old, eigen_vec_new,
-                                        center_new, Jpi_incre);
-                calcLambdaCovIncremental(points_cov_new, Jpi_incre, lambda_cov_old, lambda_cov_incre);
-                printf("incremental derivatie & cov cost: %f ms\n", t_de_incre.toc());
+                bool incre_valid = incrementalJacobianLambda(points_new, eigen_vec_old, center_old,
+                                                             eigen_vec_new, center_new, Jpi_incre);
+                if (incre_valid) {
+                    calcLambdaCovIncremental(points_cov_new, Jpi_incre, lambda_cov_old, lambda_cov_incre);
+                    printf("valid incremental derivatie & cov cost: %f ms\n", t_de_incre.toc());
 
-//                double sum_diff_jtj_1 = 0;
-//                double sum_diff_jtj_2 = 0;
-//                double sum_diff_jtj_3 = 0;
-//                vector<double> sum_diff_jtj(3, 0.0);
-                vector<double> sum_jtj_new(3, 0.0), sum_jtj_incre(3, 0.0);
-                for (int j = 0; j < points_new.size(); ++j) {
-//                    V3D diff_j = Jpi_new[j] - Jpi_incre[j];
-//                    string s_j = to_string(j);
-//                    printV(Jpi_new[i], s_j + "new");
-//                    printV(Jpi_incre[i], "incre");
-                    for (int k = 0; k < 3; ++k) {
-                        double a = Jpi_new[j].row(k) * Jpi_new[j].row(k).transpose();
-                        sum_jtj_new[k] += a;
-                        double b = Jpi_incre[j].row(k) * Jpi_incre[j].row(k).transpose(); // todo
-                        sum_jtj_incre[k] += b;
-                    }
+                    calcLambdaCovIncremental(points_cov_I, Jpi_incre, lambda_cov_I_old, lambda_cov_I_incre);
+                }
+                else {
+                    calcLambdaCov(points_cov_new, Jpi_incre, lambda_cov_incre);
+                    printf("**unvalid** incremental derivatie & cov cost: %f ms\n", t_de_incre.toc());
 
-//                    printf("point #%d diff JtJ: %f\n", j, diff_jtj);
-//                    sum_diff_jtj += diff_jtj;
+                    calcLambdaCov(points_cov_I, Jpi_incre, lambda_cov_I_incre);
                 }
+
+                printf("diff lambda cov(I): incre - standard\n");
                 for (int k = 0; k < 3; ++k) {
-                    printf("diff lambda cov(I) %d: incre - standard\n%e - %e = %e\n", k,
-                           sum_jtj_incre[k], sum_jtj_new[k], sum_jtj_incre[k] - sum_jtj_new[k]);
+                    printf("lambda %d: %e - %e = %e\n", k,
+                           lambda_cov_I_incre[k], lambda_cov_I_new[k], lambda_cov_I_incre[k] - lambda_cov_I_new[k]);
                 }
+                printf("diff lambda cov(point): incre - standard\n");
                 for (int k = 0; k < 3; ++k) {
-                    printf("diff lambda cov(point) %d: incre - standard\n%e - %e = %e\n", k,
+                    printf("lambda %d: %e - %e = %e\n", k,
                            lambda_cov_incre[k], lambda_cov_new[k], lambda_cov_incre[k] - lambda_cov_new[k]);
                 }
 
@@ -582,8 +583,9 @@ int main(int argc, char** argv) {
                 eigen_vec_old = eigen_vec_new;
                 eigen_values_old = eigen_values_new;
                 center_old = center_new;
-                Jpi_old = Jpi_incre;
+//                Jpi_old = Jpi_incre;
                 lambda_cov_old = lambda_cov_incre; // todo check
+                lambda_cov_I_old = lambda_cov_I_incre;
             }
         }
 
