@@ -221,6 +221,12 @@ void PCAEigenSolver(const vector<V3D>& points, M3D & eigen_vectors, V3D & eigen_
     Eigen::Vector3d evecMin = evecs.real().col(evalsMin);
     Eigen::Vector3d evecMid = evecs.real().col(evalsMid);
     Eigen::Vector3d evecMax = evecs.real().col(evalsMax);
+    eigen_vectors.col(0) = evecMin;
+    eigen_vectors.col(1) = evecMid;
+    eigen_vectors.col(2) = evecMax;
+    eigen_values(0) = evalsReal[evalsMin];
+    eigen_values(1) = evalsReal[evalsMid];
+    eigen_values(2) = evalsReal[evalsMax];
 
     Eigen::Matrix3d J_Q;
     J_Q << 1.0 / points_size, 0, 0, 0, 1.0 / points_size, 0, 0, 0,

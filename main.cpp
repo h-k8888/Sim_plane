@@ -408,8 +408,10 @@ int main(int argc, char** argv) {
     PCASelfAdjoint(cloud, eigen_vectors_merged, eigen_values_merged, centroid_merged);
     double resudial_merged = point2planeResidual(cloud, centroid_merged, eigen_vectors_merged.col(0));
     double theta_merged = diff_normal(normal,eigen_vectors_merged.col(0));
-    printf("\n****** PCA SelfAdjoint **********\ncloud merged\nnormal diff: %f deg\nsum residual^2: %f\n*******\n",
+    printf("\n****** PCA SelfAdjoint **********\ncloud merged\nnormal diff: %f deg\nsum residual^2: %f\n",
            theta_merged / M_PI * 180.0, resudial_merged);
+    printM(eigen_vectors_merged, "PCA Self Adjoint Eigen Vectors");
+    printV(eigen_values_merged, "PCA Self Adjoint Eifen Values");
 
     V3D pca_normal_merged = eigen_vectors_merged.col(0);
     // to pointWithCov format
@@ -462,6 +464,12 @@ int main(int argc, char** argv) {
     }
     // refine normal
 
+    M3D eigen_vec_tmp;
+    V3D eigen_values_tmp, center_tmp;
+    PCAEigenSolver(cloud, eigen_vec_tmp, eigen_values_tmp, center_tmp);
+    printM(eigen_vec_tmp, "PCA Eigen Solver Eigen Vectors");
+    printV(eigen_values_tmp, "PCA Eigen Solver Eifen Values");
+
     // test incremental Cov
     if (incre_cov_en || incre_derivative_en)
     {
@@ -505,7 +513,6 @@ int main(int argc, char** argv) {
             printM(cov, "\ncov n");
             printV(center, "center n");
         }
-
 
         double m = cloud.size();
         M3D cov_incre = cov_1;
