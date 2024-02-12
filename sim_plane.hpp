@@ -38,7 +38,7 @@ typedef Eigen::Matrix3f M3F;
 
 extern int refine_maximum_iter;
 extern double incident_cov_max, incident_cov_scale, incident_cos_min, bearing_stddev;
-extern double range_stddev;
+extern double range_stddev, lambda_cov_threshold;
 // ray: unit vector
 double calcIncidentCovScale(const V3D & ray, const double & dist, const V3D& normal)
 {
@@ -617,6 +617,34 @@ void printIncidentCov()
     }
 }
 
+
+void calcLambdaCov(const vector<M3D> & points_cov, const vector<M3D> & Jpi, vector<double> & lambda_cov)
+{
+    assert(points_cov.size() == Jpi.size());
+    lambda_cov.resize(3, 0.0);
+    for (int i = 0; i < points_cov.size(); ++i) {
+        lambda_cov[0] += Jpi[i].row(0) * points_cov[i] * Jpi[i].row(0).transpose();
+        lambda_cov[1] += Jpi[i].row(1) * points_cov[i] * Jpi[i].row(1).transpose();
+        lambda_cov[2] += Jpi[i].row(2) * points_cov[i] * Jpi[i].row(2).transpose();
+    }
+}
+
+void calcLambdaCovIncremental(const vector<M3D> & points_cov, const vector<M3D> & Jpi,
+                              vector<double> & lambda_cov_old, vector<double> & lambda_cov_incre)
+{
+    assert(points_cov.size() == Jpi.size());
+
+    lambda_cov_incre.resize(3);
+    double n = (double)points_cov.size();
+    double scale = pow((n - 1.0), 2) / (n * n); //^2
+    for (int i = 0; i < 3; ++i) {
+//        const M3D & point_cov = points_cov.back();
+//        const M3D & point_cov = points_cov.back();
+        lambda_cov_incre[i] = lambda_cov_old[i] * scale +
+                              Jpi.back().row(i) * points_cov.back() * Jpi.back().row(i).transpose();
+    }
+}
+
 /// partial derivative of eigen value with respect to point
 void derivativeEigenValue(const vector<V3D> & points, const M3D & eigen_vectors,
                           const V3D & center, const int& lambda_i, vector<V3D> & Jpi)
@@ -676,9 +704,12 @@ void incrementalDeEigenValue(const vector<V3D> & points, const M3D & eigen_vecto
     Jpi_new.back() = term_2 * (n - 1);
 }
 
-void incrementalDeEigenValue(const vector<V3D> & points, const M3D & eigen_vectors_old, const V3D & center_old,
-                             const vector<M3D> & Jpi_old, const M3D & eigen_vectors_new, vector<M3D> & Jpi_new)
+// return whether the update is incremental
+bool incrementalDeEigenValue(const vector<V3D> & points, const M3D & eigen_vectors_old, const V3D & center_old,
+                             const vector<M3D> & Jpi_old, const M3D & eigen_vectors_new, const V3D & center_new,
+                             vector<M3D> & Jpi_incre)
 {
+    assert(points.size() == Jpi_old.size() + 1);
     double n = (double)points.size();
     const V3D & xn = points.back();
     V3D xn_mn1 = xn - center_old;
@@ -694,48 +725,29 @@ void incrementalDeEigenValue(const vector<V3D> & points, const M3D & eigen_vecto
         double cos_en_1 = abs(xn_mn1.dot(en_1));
         double cos_theta = abs(en.dot(en_1));
         term_2[i] =  ( cos_en * en_1 + cos_en_1 * en_1) / (n * n * cos_theta);
-//        printf("lambda %d: %e %e %e\n", i + 1, term_2[i](0), term_2[i](1), term_2[i](2));
+//        printf("lambda increment term %d: %e %e %e\n", i + 1, term_2[i](0), term_2[i](1), term_2[i](2));
     }
-    Jpi_new.resize(points.size());
+    Jpi_incre.resize(points.size());
     double scale_1 = (n - 1) / n;
-//    V3D term_2 =  (cos_n * en_1 + cos_n_1 * e1) / (n * n * cos_theta);
-    for (int i = 0; i < points.size() - 1; ++i) { // i = 1, 2 ..., n-1
-        Jpi_new[i].row(0) = scale_1 * Jpi_old[i].row(0) - term_2[0].transpose(); // d lambda1 d p
-        Jpi_new[i].row(1) = scale_1 * Jpi_old[i].row(1) - term_2[1].transpose(); // d lambda2 d p
-        Jpi_new[i].row(2) = scale_1 * Jpi_old[i].row(2) - term_2[2].transpose(); // d lambda3 d p
-    }
+//    if (term_2[0].norm() > lambda_cov_threshold) {
+//        derivativeEigenValue(points, eigen_vectors_new, center_new, Jpi_new);
+        for (int i = 0; i < points.size() - 1; ++i) { // i = 1, 2 ..., n-1
+            Jpi_incre[i].row(0) = scale_1 * Jpi_old[i].row(0) - term_2[0].transpose(); // d lambda1 d p
+            Jpi_incre[i].row(1) = scale_1 * Jpi_old[i].row(1) - term_2[1].transpose(); // d lambda2 d p
+            Jpi_incre[i].row(2) = scale_1 * Jpi_old[i].row(2) - term_2[2].transpose(); // d lambda3 d p
+        }
+//    printf("lambda increment term last");
 
-    // for i = n
-    Jpi_new.back().row(0) = term_2[0].transpose() * (n - 1); // d lambda1 d p
-    Jpi_new.back().row(1) = term_2[1].transpose() * (n - 1); // d lambda2 d p
-    Jpi_new.back().row(2) = term_2[2].transpose() * (n - 1); // d lambda3 d p
+//    }
+//    else {
+//        Jpi_new.resize(1);
+        // for i = n
+    Jpi_incre.back().row(0) = term_2[0].transpose() * (n - 1); // d lambda1 d p
+    Jpi_incre.back().row(1) = term_2[1].transpose() * (n - 1); // d lambda2 d p
+    Jpi_incre.back().row(2) = term_2[2].transpose() * (n - 1); // d lambda3 d p
+    return false;
+//    }
 }
 
-void calcLambdaCov(const vector<M3D> & points_cov, const vector<M3D> & Jpi, vector<double> & lambda_cov)
-{
-    assert(points_cov.size() == Jpi.size());
-    lambda_cov.resize(3, 0.0);
-    for (int i = 0; i < points_cov.size(); ++i) {
-        lambda_cov[0] += Jpi[i].row(0) * points_cov[i] * Jpi[i].row(0).transpose();
-        lambda_cov[1] += Jpi[i].row(1) * points_cov[i] * Jpi[i].row(1).transpose();
-        lambda_cov[2] += Jpi[i].row(2) * points_cov[i] * Jpi[i].row(2).transpose();
-    }
-}
-
-void calcLambdaCovIncremental(const vector<M3D> & points_cov, const vector<M3D> & Jpi,
-                              vector<double> & lambda_cov_old, vector<double> & lambda_cov_incre)
-{
-    assert(points_cov.size() == Jpi.size());
-
-    lambda_cov_incre.resize(3);
-    double n = (double)points_cov.size();
-    double scale = pow((n - 1.0), 2) / (n * n);
-    for (int i = 0; i < 3; ++i) {
-//        const M3D & point_cov = points_cov.back();
-//        const M3D & point_cov = points_cov.back();
-        lambda_cov_incre[i] = lambda_cov_old[i] * scale +
-                Jpi.back().row(i) * points_cov.back() * Jpi.back().row(i).transpose();
-    }
-}
 
 #endif //SIM_PLANE_SIM_PLANE_H
