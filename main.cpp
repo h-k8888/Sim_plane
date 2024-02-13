@@ -497,8 +497,8 @@ int main(int argc, char** argv) {
     PCAEigenSolver(cloud_cov, eigen_vec_tmp, eigen_values_tmp);
     calcNormalCov(cloud_3D, eigen_vec_tmp, eigen_values_tmp, cloud_center, normal_center_cov_tmp2);
     printf("Cov + ES + Normal Cov cost: %fms\n", t_c_es.toc());
-    M6D n_c_cov_diff2 = normal_center_cov_tmp2 - normal_center_cov_std;
-    printM(n_c_cov_diff2, "normal center cov diff2");
+//    M6D n_c_cov_diff2 = normal_center_cov_tmp2 - normal_center_cov_std;
+//    printM(n_c_cov_diff2, "normal center cov diff2");
 
     // test incremental Cov
     if (incre_cov_en || incre_derivative_en)
@@ -513,10 +513,9 @@ int main(int argc, char** argv) {
             printV(center_1, "center n - 1");
         }
 
-
         // set variance before iterative
         vector<V3D> points_old(cloud.size() - incre_points);
-        printf("points_cov.size() %d", (int)points_cov.size());
+//        printf("points_cov.size() %d", (int)points_cov.size());
         vector<M3D> points_cov_old(points_cov.size() - incre_points);
         for (int i = 0; i < points_old.size(); ++i) {
             points_old[i] = cloud[i].head(3);
@@ -548,12 +547,14 @@ int main(int argc, char** argv) {
         M3D cov_incre = cov_1;
         V3D center_incre = center_1;
         for (int i = cloud.size() - incre_points; i < m; ++i) {
+            TicToc t_cc_inc;
             double n = i + 1;
             const V3D &xn = cloud[i].head(3);
             const M3D & point_cov_i = points_cov[i];
             V3D xn_mn_1 = xn - center_incre;
             cov_incre = (n - 1) / n * (cov_incre + (xn_mn_1 * xn_mn_1.transpose()) / n);
             center_incre = center_incre / n * (n - 1) + xn / n;
+            double t_incre1 = t_cc_inc.toc();
 
             if (incre_derivative_en)
             {
@@ -574,12 +575,18 @@ int main(int argc, char** argv) {
                 /// standardized formula for calculating lambda covariance
 //                vector<V3D> Jpi_new;
                 vector<M3D> Jpi_new;
+                M3D cov_new;
                 vector<double> lambda_cov_new;
-                TicToc t_de;
+                TicToc t_std;
+                calcCloudCov(points_new, cov_new, center_new); // calc cov and center first
+                double t_std1 = t_std.toc();
                 JacobianLambda(points_new, eigen_vec_new, center_new, Jpi_new);
+                double t_std2 = t_std.toc();
                 // compute lambda cov
                 calcLambdaCov(points_cov_new, Jpi_new, lambda_cov_new);
-                printf("standard derivatie & cov cost: %f ms\n", t_de.toc());
+                double t_std3 = t_std.toc();
+                printf("standard cost: %fms\ncenter & cov: %f derivatie %f lambda cov: %f\n",
+                       t_std3, t_std1, t_std2 - t_std1, t_std3 - t_std2);
                 // cov as I for test only
                 vector<double> lambda_cov_I_new;
                 calcLambdaCov(points_cov_I, Jpi_new, lambda_cov_I_new); // in fact, JtJ
@@ -592,15 +599,20 @@ int main(int argc, char** argv) {
                 TicToc t_de_incre;
                 bool incre_valid = incrementalJacobianLambda(points_new, eigen_vec_old, center_old,
                                                              eigen_vec_new, center_new, Jpi_incre);
+                double t_de_incre1 = t_de_incre.toc();
                 if (incre_valid) {
                     calcLambdaCovIncremental(points_cov_new, Jpi_incre, lambda_cov_old, lambda_cov_incre);
-                    printf("valid incremental derivatie & cov cost: %f ms\n", t_de_incre.toc());
+                    double t_de_incre2 = t_de_incre.toc();
+                    printf("incremental cost: %fms\ncenter & cov %f derivatie %f lambda cov: %f\n",
+                           t_de_incre2 + t_incre1, t_incre1, t_de_incre1, t_de_incre2 - t_de_incre1);
 
                     calcLambdaCovIncremental(points_cov_I, Jpi_incre, lambda_cov_I_old, lambda_cov_I_incre);
                 }
                 else {
                     calcLambdaCov(points_cov_new, Jpi_incre, lambda_cov_incre);
-                    printf("**unvalid** incremental derivatie & cov cost: %f ms\n", t_de_incre.toc());
+                    double t_de_incre2 = t_de_incre.toc();
+                    printf("***unvalid*** incremental cost: %fms\ncenter & cov %f derivatie %f lambda cov: %f\n",
+                           t_de_incre2 + t_incre1, t_incre1, t_de_incre1, t_de_incre2 - t_de_incre1);
 
                     calcLambdaCov(points_cov_I, Jpi_incre, lambda_cov_I_incre);
                 }
