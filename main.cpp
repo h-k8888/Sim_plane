@@ -473,20 +473,32 @@ int main(int argc, char** argv) {
     M3D eigen_vec_std;
     V3D eigen_values_std, center_std;
     M6D normal_center_cov_std;
-    PCAEigenSolver(cloud_3D, eigen_vec_std, eigen_values_std, center_std, normal_center_cov_std);
-    printM(eigen_vec_std, "PCA Eigen Solver Eigen Vectors");
-    printV(eigen_values_std, "PCA Eigen Solver Eifen Values");
+    TicToc t_es;
+    CovEigenSolverNormalCov(cloud_3D, eigen_vec_std, eigen_values_std, center_std, normal_center_cov_std);
+    printf("VoxelMap Eigen Solver Cov cost: %fms\n", t_es.toc());
+//    printM(eigen_vec_std, "PCA Eigen Solver Eigen Vectors");
+//    printV(eigen_values_std, "PCA Eigen Solver Eifen Values");
 
     M3D cloud_cov;
     V3D cloud_center;
-    calcCovMatrix(cloud_3D, cloud_cov, cloud_center); // calc cov and center first
     M3D eigen_vec_tmp;
     V3D eigen_values_tmp;
     M6D normal_center_cov_tmp;
-    PCAEigenSolver(cloud_cov, cloud_3D, cloud_center, eigen_vec_tmp, eigen_values_tmp, normal_center_cov_tmp);
+//    TicToc t_c_es;
+//    calcCloudCov(cloud_3D, cloud_cov, cloud_center); // calc cov and center first
+//    CovEigenSolverNormalCov(cloud_cov, cloud_3D, cloud_center, eigen_vec_tmp, eigen_values_tmp, normal_center_cov_tmp);
+//    printf("Cov + Eigen Solver cost: %fms\n", t_es.toc());
+//    M6D n_c_cov_diff = normal_center_cov_tmp - normal_center_cov_std;
+//    printM(n_c_cov_diff, "normal center cov diff");
 
-    M6D n_c_cov_diff = normal_center_cov_tmp - normal_center_cov_std;
-    printM(n_c_cov_diff, "normal center cov diff");
+    M6D normal_center_cov_tmp2;
+    TicToc t_c_es;
+    calcCloudCov(cloud_3D, cloud_cov, cloud_center); // calc cov and center first
+    PCAEigenSolver(cloud_cov, eigen_vec_tmp, eigen_values_tmp);
+    calcNormalCov(cloud_3D, eigen_vec_tmp, eigen_values_tmp, cloud_center, normal_center_cov_tmp2);
+    printf("Cov + ES + Normal Cov cost: %fms\n", t_c_es.toc());
+    M6D n_c_cov_diff2 = normal_center_cov_tmp2 - normal_center_cov_std;
+    printM(n_c_cov_diff2, "normal center cov diff2");
 
     // test incremental Cov
     if (incre_cov_en || incre_derivative_en)
