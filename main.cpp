@@ -53,6 +53,7 @@ V3D b1, b2;
 string cfg_file("/home/hk/CLionProjects/Sim_plane/cfg.ini");
 
 vector<V4D> cloud, lidars;
+vector<V3D> cloud_3D;
 vector<M3D> points_cov;
 vector<vector<V4D>> cloud_per_lidar;
 vector<double> mean_incidents;
@@ -403,6 +404,11 @@ int main(int argc, char** argv) {
                mean_incidents[i], theta / M_PI * 180.0, resudial);
     }
 
+    cloud_3D.resize(cloud.size());
+    for (int i = 0; i < cloud.size(); ++i) {
+        cloud_3D[i] = cloud[i].head(3);
+    }
+
     M3D eigen_vectors_merged;
     V3D eigen_values_merged, centroid_merged;
     PCASelfAdjoint(cloud, eigen_vectors_merged, eigen_values_merged, centroid_merged);
@@ -464,11 +470,23 @@ int main(int argc, char** argv) {
     }
     // refine normal
 
+    M3D eigen_vec_std;
+    V3D eigen_values_std, center_std;
+    M6D normal_center_cov_std;
+    PCAEigenSolver(cloud_3D, eigen_vec_std, eigen_values_std, center_std, normal_center_cov_std);
+    printM(eigen_vec_std, "PCA Eigen Solver Eigen Vectors");
+    printV(eigen_values_std, "PCA Eigen Solver Eifen Values");
+
+    M3D cloud_cov;
+    V3D cloud_center;
+    calcCovMatrix(cloud_3D, cloud_cov, cloud_center); // calc cov and center first
     M3D eigen_vec_tmp;
-    V3D eigen_values_tmp, center_tmp;
-    PCAEigenSolver(cloud, eigen_vec_tmp, eigen_values_tmp, center_tmp);
-    printM(eigen_vec_tmp, "PCA Eigen Solver Eigen Vectors");
-    printV(eigen_values_tmp, "PCA Eigen Solver Eifen Values");
+    V3D eigen_values_tmp;
+    M6D normal_center_cov_tmp;
+    PCAEigenSolver(cloud_cov, cloud_3D, cloud_center, eigen_vec_tmp, eigen_values_tmp, normal_center_cov_tmp);
+
+    M6D n_c_cov_diff = normal_center_cov_tmp - normal_center_cov_std;
+    printM(n_c_cov_diff, "normal center cov diff");
 
     // test incremental Cov
     if (incre_cov_en || incre_derivative_en)
@@ -601,8 +619,9 @@ int main(int argc, char** argv) {
             printM(cov_incre, "\ncov n incre");
             printV(center_incre, "center_incre");
 
-            printM(cov - cov_incre, "\ncov diff");
-            printV(center - center_incre, "center diff");
+            M3D cov_diff = (cov - cov_incre);
+            printM(cov_diff, "\ncov diff");
+            printV((center - center_incre), "center diff");
         }
     }
 
