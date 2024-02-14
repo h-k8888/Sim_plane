@@ -218,8 +218,8 @@ void PCAEigenSolver(const M3D & covariance, M3D & eigen_vectors, V3D & eigen_val
 }
 
 // PCA Eigen Solver
-void PCAEigenSolver(const M3D & covariance, const vector<V3D>& points, const V3D & center,
-                    M3D & eigen_vectors, V3D & eigen_values, M6D & plane_cov)
+void EigenSolverNormalCov(const M3D & covariance, const vector<V3D>& points, const V3D & center,
+                             M3D & eigen_vectors, V3D & eigen_values, M6D & plane_cov)
 {
     TicToc t_start;
     plane_cov = M6D::Zero();

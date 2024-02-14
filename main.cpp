@@ -470,12 +470,12 @@ int main(int argc, char** argv) {
     }
     // refine normal
 
-    M3D eigen_vec_std;
-    V3D eigen_values_std, center_std;
-    M6D normal_center_cov_std;
-    TicToc t_es;
-    CovEigenSolverNormalCov(cloud_3D, eigen_vec_std, eigen_values_std, center_std, normal_center_cov_std);
-    printf("VoxelMap Eigen Solver Cov cost: %fms\n", t_es.toc());
+//    M3D eigen_vec_std;
+//    V3D eigen_values_std, center_std;
+//    M6D normal_center_cov_std;
+//    TicToc t_es;
+//    CovEigenSolverNormalCov(cloud_3D, eigen_vec_std, eigen_values_std, center_std, normal_center_cov_std);
+//    printf("VoxelMap Eigen Solver Cov cost: %fms\n", t_es.toc());
 //    printM(eigen_vec_std, "PCA Eigen Solver Eigen Vectors");
 //    printV(eigen_values_std, "PCA Eigen Solver Eifen Values");
 
@@ -491,12 +491,12 @@ int main(int argc, char** argv) {
 //    M6D n_c_cov_diff = normal_center_cov_tmp - normal_center_cov_std;
 //    printM(n_c_cov_diff, "normal center cov diff");
 
-    M6D normal_center_cov_tmp2;
-    TicToc t_c_es;
-    calcCloudCov(cloud_3D, cloud_cov, cloud_center); // calc cov and center first
-    PCAEigenSolver(cloud_cov, eigen_vec_tmp, eigen_values_tmp);
-    calcNormalCov(cloud_3D, eigen_vec_tmp, eigen_values_tmp, cloud_center, normal_center_cov_tmp2);
-    printf("Cov + ES + Normal Cov cost: %fms\n", t_c_es.toc());
+//    M6D normal_center_cov_tmp2;
+//    TicToc t_c_es;
+//    calcCloudCov(cloud_3D, cloud_cov, cloud_center); // calc cov and center first
+//    PCAEigenSolver(cloud_cov, eigen_vec_tmp, eigen_values_tmp);
+//    calcNormalCov(cloud_3D, eigen_vec_tmp, eigen_values_tmp, cloud_center, normal_center_cov_tmp2);
+//    printf("Cov + ES + Normal Cov cost: %fms\n", t_c_es.toc());
 //    M6D n_c_cov_diff2 = normal_center_cov_tmp2 - normal_center_cov_std;
 //    printM(n_c_cov_diff2, "normal center cov diff2");
 
@@ -627,6 +627,26 @@ int main(int argc, char** argv) {
                     printf("lambda %d: %e - %e = %e\n", k,
                            lambda_cov_incre[k], lambda_cov_new[k], lambda_cov_incre[k] - lambda_cov_new[k]);
                 }
+
+                // normal cov
+                M3D eigen_vec_std;
+                V3D eigen_values_std, center_std;
+                M6D normal_center_cov_std;
+                TicToc t_es;
+                CovEigenSolverNormalCov(points_new, eigen_vec_std, eigen_values_std, center_new, normal_center_cov_std);
+//                EigenSolverNormalCov(cov_new, points_new, center_new, eigen_vec_std, eigen_values_std, normal_center_cov_std);
+                printf("VoxelMap Eigen Solver & normal Cov cost: %fms\n", t_es.toc());
+//                printM(normal_center_cov_std, "normal_center_cov_std");
+
+                M6D normal_center_cov_tmp2;
+                TicToc t_c_es;
+//                calcCloudCov(cloud_3D, cloud_cov, cloud_center); // calc cov and center first
+                PCAEigenSolver(cov_incre, eigen_vec_tmp, eigen_values_tmp);
+                calcNormalCov(points_new, eigen_vec_tmp, eigen_values_tmp, center_incre, normal_center_cov_tmp2);
+                printf("Cov + ES + Normal Cov cost: %fms\n", t_c_es.toc());
+//                printM(normal_center_cov_tmp2, "normal_center_cov_tmp2");
+                M6D n_c_cov_diff2 = normal_center_cov_tmp2 - normal_center_cov_std;
+                printM(n_c_cov_diff2, "normal center cov diff2");
 
                 points_old = points_new;
                 points_cov_old = points_cov_new;
