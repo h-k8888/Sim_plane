@@ -543,6 +543,11 @@ int main(int argc, char** argv) {
             printV(center, "center n");
         }
 
+        vector<M63D> Jnq_p_old;
+        M6D n_q_cov_old;
+        CovEigenSolverNormalCov(points_old, eigen_vec_old, eigen_values_old, center_old,
+                                Jnq_p_old, n_q_cov_old);
+
         double m = cloud.size();
         M3D cov_incre = cov_1;
         V3D center_incre = center_1;
@@ -632,21 +637,45 @@ int main(int argc, char** argv) {
                 M3D eigen_vec_std;
                 V3D eigen_values_std, center_std;
                 M6D normal_center_cov_std;
+                vector<M63D> Jnq_p_std;
                 TicToc t_es;
-                CovEigenSolverNormalCov(points_new, eigen_vec_std, eigen_values_std, center_new, normal_center_cov_std);
+                CovEigenSolverNormalCov(points_new, eigen_vec_std, eigen_values_std, center_new,
+                                        Jnq_p_std, normal_center_cov_std);
 //                EigenSolverNormalCov(cov_new, points_new, center_new, eigen_vec_std, eigen_values_std, normal_center_cov_std);
                 printf("VoxelMap Eigen Solver & normal Cov cost: %fms\n", t_es.toc());
-//                printM(normal_center_cov_std, "normal_center_cov_std");
 
                 M6D normal_center_cov_tmp2;
+                M6D n_q_cov_incre;
+                M3D n_cov_incre;
+                vector<M63D> Jnq_p_incre;
                 TicToc t_c_es;
 //                calcCloudCov(cloud_3D, cloud_cov, cloud_center); // calc cov and center first
                 PCAEigenSolver(cov_incre, eigen_vec_tmp, eigen_values_tmp);
-                calcNormalCov(points_new, eigen_vec_tmp, eigen_values_tmp, center_incre, normal_center_cov_tmp2);
-                printf("Cov + ES + Normal Cov cost: %fms\n", t_c_es.toc());
+                double t_es_ = t_c_es.toc();
+//                calcNormalCov(points_new, eigen_vec_tmp, eigen_values_tmp, center_incre, normal_center_cov_tmp2);
+                calcNormalCovIncremental(points_new, eigen_vec_old, eigen_values_old, center_old, Jnq_p_old,
+                                         n_q_cov_old, eigen_vec_new, eigen_values_new, n_q_cov_incre,
+                                         Jnq_p_incre, n_cov_incre);
+                double t_c_es_incre = t_c_es.toc();
+                printf("incremental normal cov cost: %fms\n", t_incre1 + t_c_es_incre);
+                printf("Cov: %fms ES: %fms Normal Cov: %fms\n", t_incre1, t_es_, t_c_es_incre - t_es_);
+
+//                for (int j = 0; j < points_new.size(); ++j) {
+//                    M3D j_std = Jnq_p_std[j].block<3,3>(0,0);
+//                    printM(j_std, to_string(j) + "j_std");
+//                    M3D j_incre = Jnq_p_incre[j].block<3,3>(0,0);
+//                    printM(j_incre, to_string(j) + "j_incre");
+//                    M3D dndp = j_incre - j_std;
+//                    printM(dndp, to_string(j) + " dndp diff");
+//                }
+
+                printM(normal_center_cov_std, "normal_center_cov_std");
 //                printM(normal_center_cov_tmp2, "normal_center_cov_tmp2");
-                M6D n_c_cov_diff2 = normal_center_cov_tmp2 - normal_center_cov_std;
-                printM(n_c_cov_diff2, "normal center cov diff2");
+                printM(n_cov_incre, "normal cov incre");
+                M3D n_q_cov_diff = n_cov_incre - normal_center_cov_std.block<3, 3>(0, 0);
+                printM(n_q_cov_diff, "n_q_cov_diff");
+//                M6D n_c_cov_diff2 = normal_center_cov_tmp2 - normal_center_cov_std;
+//                printM(n_c_cov_diff2, "normal center cov diff2");
 
                 points_old = points_new;
                 points_cov_old = points_cov_new;
@@ -656,6 +685,7 @@ int main(int argc, char** argv) {
 //                Jpi_old = Jpi_incre;
                 lambda_cov_old = lambda_cov_incre;
                 lambda_cov_I_old = lambda_cov_I_incre;
+                Jnq_p_old = Jnq_p_std;
             }
         }
 
