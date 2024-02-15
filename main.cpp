@@ -646,7 +646,6 @@ int main(int argc, char** argv) {
 
                 M6D normal_center_cov_tmp2;
                 M6D n_q_cov_incre;
-                M3D n_cov_incre;
                 vector<M63D> Jnq_p_incre;
                 TicToc t_c_es;
 //                calcCloudCov(cloud_3D, cloud_cov, cloud_center); // calc cov and center first
@@ -655,7 +654,7 @@ int main(int argc, char** argv) {
 //                calcNormalCov(points_new, eigen_vec_tmp, eigen_values_tmp, center_incre, normal_center_cov_tmp2);
                 calcNormalCovIncremental(points_new, eigen_vec_old, eigen_values_old, center_old, Jnq_p_old,
                                          n_q_cov_old, eigen_vec_new, eigen_values_new, n_q_cov_incre,
-                                         Jnq_p_incre, n_cov_incre);
+                                         Jnq_p_incre);
                 double t_c_es_incre = t_c_es.toc();
                 printf("incremental normal cov cost: %fms\n", t_incre1 + t_c_es_incre);
                 printf("Cov: %fms ES: %fms Normal Cov: %fms\n", t_incre1, t_es_, t_c_es_incre - t_es_);
@@ -671,6 +670,7 @@ int main(int argc, char** argv) {
 
                 printM(normal_center_cov_std, "normal_center_cov_std");
 //                printM(normal_center_cov_tmp2, "normal_center_cov_tmp2");
+                M3D n_cov_incre = n_q_cov_incre.block<3, 3>(0, 0);
                 printM(n_cov_incre, "normal cov incre");
                 M3D n_q_cov_diff = n_cov_incre - normal_center_cov_std.block<3, 3>(0, 0);
                 printM(n_q_cov_diff, "n_q_cov_diff");
@@ -685,7 +685,7 @@ int main(int argc, char** argv) {
 //                Jpi_old = Jpi_incre;
                 lambda_cov_old = lambda_cov_incre;
                 lambda_cov_I_old = lambda_cov_I_incre;
-                Jnq_p_old = Jnq_p_std;
+                Jnq_p_old = Jnq_p_incre;
             }
         }
 

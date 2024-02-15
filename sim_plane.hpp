@@ -1051,23 +1051,23 @@ void calcNormalCovIncremental(const vector<V3D> & points, const M3D & eigen_vect
                               const V3D& center_old, const vector<M63D> & Jnq_p_old, const M6D & nq_cov_old,
                               const M3D & eigen_vectors_new,
                               const V3D & eigen_values_new, M6D & plane_cov,
-                              vector<M63D> & Jnq_p, M3D & normal_cov_incre)
+                              vector<M63D> & Jnq_p)
 {
     double n = (double)points.size();
-    double scale_1 = (n - 1.0) / n; // sacle 1: number of points
+//    double scale_1 = (n - 1.0) / n; // sacle 1: number of points
 
     const V3D & Vk_min = eigen_vectors_new.col(0); // eigen vector of n points covirance
     const V3D & Vk_mid = eigen_vectors_new.col(1);
     const V3D & Vk_max = eigen_vectors_new.col(2);
-    double lambdaK_min = eigen_values_new(0);
-    double lambdaK_mid = eigen_values_new(1);
-    double lambdaK_max = eigen_values_new(2);
+//    const double & lambdaK_min = eigen_values_new(0);
+//    const double & lambdaK_mid = eigen_values_new(1);
+//    const double & lambdaK_max = eigen_values_new(2);
     const V3D & Vk1_min = eigen_vectors_old.col(0); // eigen vector of n-1 points covirance
     const V3D & Vk1_mid = eigen_vectors_old.col(1);
     const V3D & Vk1_max = eigen_vectors_old.col(2);
-    double lambdaK1_min = eigen_values_old(0);
-    double lambdaK1_mid = eigen_values_old(1);
-    double lambdaK1_max = eigen_values_old(2);
+//    const double & lambdaK1_min = eigen_values_old(0);
+//    const double & lambdaK1_mid = eigen_values_old(1);
+//    const double & lambdaK1_max = eigen_values_old(2);
 
     const V3D & xn = points.back();
     V3D xn_mn1 = xn - center_old;
@@ -1075,14 +1075,17 @@ void calcNormalCovIncremental(const vector<V3D> & points, const M3D & eigen_vect
     double cos_min = abs(xn_mn1.dot(Vk_min)); // vector mid * mx_mn1
     double cos_mid = abs(xn_mn1.dot(Vk_mid)); // vector mid * mx_mn1
     double cos_max = abs(xn_mn1.dot(Vk_max));
-    double lambda_k_min_mid = lambdaK_min - lambdaK_mid; // n points
-    double lambda_k_min_max = lambdaK_min - lambdaK_max;
-    double lambda_k1_min_mid = lambdaK1_min - lambdaK1_mid; // n-1 points
-    double lambda_k1_min_max = lambdaK1_min - lambdaK1_max;
-    scale_1 = scale_1 * abs(Vk_min.dot(Vk1_min));
+    double lambda_k_min_mid = eigen_values_new(0) - eigen_values_new(1); // n points
+    double lambda_k_min_max = eigen_values_new(0) - eigen_values_new(2);
+    double lambda_k1_min_mid = eigen_values_old(0) - eigen_values_old(1); // n-1 points
+    double lambda_k1_min_max = eigen_values_old(0) - eigen_values_old(2);
+    double scale_1 = (n - 1.0) / n * abs(Vk_min.dot(Vk1_min));
 
     V3D term_2_mid = (cos_mid * Vk_min + cos_min * Vk_mid) / (n * n * lambda_k_min_mid);
     V3D term_2_max = (cos_max * Vk_min + cos_max * Vk_mid) / (n * n * lambda_k_min_max);
+
+    double scale_mid = scale_1 * lambda_k1_min_mid / lambda_k_min_mid * abs(Vk_mid.dot(Vk1_mid));
+    double scale_max = scale_1 * lambda_k1_min_max / lambda_k_min_max * abs(Vk_max.dot(Vk1_max));
 
     int points_size = points.size();
     plane_cov = M6D::Zero();
@@ -1095,23 +1098,21 @@ void calcNormalCovIncremental(const vector<V3D> & points, const M3D & eigen_vect
         Eigen::Matrix<double, 6, 3> J;
 //        Eigen::Matrix3d F = M3D::Zero();
 //        V3D p_center = points[i] - center_old;
-        double scale_mid = scale_1 * lambda_k1_min_mid / lambda_k_min_mid * abs(Vk_mid.dot(Vk1_mid));
-        double scale_max = scale_1 * lambda_k1_min_max / lambda_k_min_max * abs(Vk_max.dot(Vk1_max));
-        M3D UkUk1t = eigen_vectors_new * eigen_vectors_old.transpose();
-        UkUk1t.row(1) = scale_mid * UkUk1t.row(1);
-        UkUk1t.row(2) = scale_max * UkUk1t.row(2);
+//        M3D UkUk1t = eigen_vectors_new * eigen_vectors_old.transpose();
+//        UkUk1t.row(1) = scale_mid * UkUk1t.row(1);
+//        UkUk1t.row(2) = scale_max * UkUk1t.row(2);
         M3D UtJ_old = eigen_vectors_old.transpose() * Jnq_p_old[i].block<3,3>(0,0);
         UtJ_old.row(1) = scale_mid * UtJ_old.row(1) - term_2_mid.transpose();
         UtJ_old.row(2) = scale_max * UtJ_old.row(2) - term_2_max.transpose();
         M3D J_incre = eigen_vectors_new * UtJ_old;
         
-        normal_cov_incre = UkUk1t * nq_cov_old.block<3, 3>(0, 0) * UkUk1t.transpose();
+//        normal_cov_incre = UkUk1t * nq_cov_old.block<3, 3>(0, 0) * UkUk1t.transpose();
 
-//        J.block<3, 3>(0, 0) = eigen_vectors * F;
-//        J.block<3, 3>(3, 0) = J_Q;
+        J.block<3, 3>(0, 0) = J_incre;
+        J.block<3, 3>(3, 0) = J_Q;
 
 //        plane_cov += J * points[i].cov * J.transpose();
-        plane_cov.block<3,3>(0,0) += J_incre * M3D::Identity() * J_incre.transpose();
+        plane_cov += J * M3D::Identity() * J.transpose();
         Jnq_p[i].block<3,3>(0,0) = J_incre;
         Jnq_p[i].block<3, 3>(3, 0) = J_Q;
 
@@ -1131,11 +1132,12 @@ void calcNormalCovIncremental(const vector<V3D> & points, const M3D & eigen_vect
     J_n.row(1) = term_n_mid;
     J_n.row(2) = term_n_max;
     J_n = eigen_vectors_new * J_n;
-    
-    
-    Jnq_p.back().block<3,3> (0, 0) = J_n;
-    plane_cov.block<3,3>(0,0) += J_n * M3D::Identity() * J_n.transpose();
+    Eigen::Matrix<double, 6, 3> J;
+    J.block<3, 3>(0, 0) = J_n;
+    J.block<3, 3>(3, 0) = J_Q;
 
+    Jnq_p.back().block<3,3> (0, 0) = J_n;
+    plane_cov += J * M3D::Identity() * J.transpose();
 //    Jnq_p.back().block<3, 3>(3, 0) = J_Q;
 }
 #endif //SIM_PLANE_SIM_PLANE_H
