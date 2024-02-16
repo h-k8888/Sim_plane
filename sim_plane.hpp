@@ -356,13 +356,13 @@ void CovEigenSolverNormalCov(const vector<V3D>& points, M3D & eigen_vectors, V3D
 
 
 // CovEigenSolverNormalCov, code from VoxelMap
-void CovEigenSolverNormalCov(const vector<V3D>& points, M3D & eigen_vectors, V3D & eigen_values, V3D & center,
+void CovEigenSolverNormalCov(const vector<V3D>& points, M3D & eigen_vectors, V3D & eigen_values,
                              vector<M63D> & Jn_p, M6D & plane_cov)
 {
     TicToc t_start;
     plane_cov = M6D::Zero();
     M3D covariance = Eigen::Matrix3d::Zero();
-    center = Eigen::Vector3d::Zero();
+    V3D center = Eigen::Vector3d::Zero();
     V3D normal = Eigen::Vector3d::Zero();
 
     int points_size = points.size();
@@ -1082,7 +1082,7 @@ void calcNormalCovIncremental(const vector<V3D> & points, const M3D & eigen_vect
     double scale_1 = (n - 1.0) / n * abs(Vk_min.dot(Vk1_min));
 
     V3D term_2_mid = (cos_mid * Vk_min + cos_min * Vk_mid) / (n * n * lambda_k_min_mid);
-    V3D term_2_max = (cos_max * Vk_min + cos_max * Vk_mid) / (n * n * lambda_k_min_max);
+    V3D term_2_max = (cos_max * Vk_min + cos_min * Vk_max) / (n * n * lambda_k_min_max);
 
     double scale_mid = scale_1 * lambda_k1_min_mid / lambda_k_min_mid * abs(Vk_mid.dot(Vk1_mid));
     double scale_max = scale_1 * lambda_k1_min_max / lambda_k_min_max * abs(Vk_max.dot(Vk1_max));
@@ -1113,8 +1113,7 @@ void calcNormalCovIncremental(const vector<V3D> & points, const M3D & eigen_vect
 
 //        plane_cov += J * points[i].cov * J.transpose();
         plane_cov += J * M3D::Identity() * J.transpose();
-        Jnq_p[i].block<3,3>(0,0) = J_incre;
-        Jnq_p[i].block<3, 3>(3, 0) = J_Q;
+        Jnq_p[i] = J;
 
 //            const pointWithCov & pv = points[i];
 //            double cos_theta = abs(plane->normal.dot(pv.normal.cast<double>())); // [0, 1.0]

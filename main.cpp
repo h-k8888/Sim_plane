@@ -545,8 +545,7 @@ int main(int argc, char** argv) {
 
         vector<M63D> Jnq_p_old;
         M6D n_q_cov_old;
-        CovEigenSolverNormalCov(points_old, eigen_vec_old, eigen_values_old, center_old,
-                                Jnq_p_old, n_q_cov_old);
+        CovEigenSolverNormalCov(points_old, eigen_vec_old, eigen_values_old, Jnq_p_old, n_q_cov_old);
 
         double m = cloud.size();
         M3D cov_incre = cov_1;
@@ -639,8 +638,7 @@ int main(int argc, char** argv) {
                 M6D normal_center_cov_std;
                 vector<M63D> Jnq_p_std;
                 TicToc t_es;
-                CovEigenSolverNormalCov(points_new, eigen_vec_std, eigen_values_std, center_new,
-                                        Jnq_p_std, normal_center_cov_std);
+                CovEigenSolverNormalCov(points_new, eigen_vec_std, eigen_values_std, Jnq_p_std, normal_center_cov_std);
 //                EigenSolverNormalCov(cov_new, points_new, center_new, eigen_vec_std, eigen_values_std, normal_center_cov_std);
                 printf("VoxelMap Eigen Solver & normal Cov cost: %fms\n", t_es.toc());
 
@@ -669,13 +667,13 @@ int main(int argc, char** argv) {
 //                }
 
                 printM(normal_center_cov_std, "normal_center_cov_std");
-//                printM(normal_center_cov_tmp2, "normal_center_cov_tmp2");
-                M3D n_cov_incre = n_q_cov_incre.block<3, 3>(0, 0);
-                printM(n_cov_incre, "normal cov incre");
-                M3D n_q_cov_diff = n_cov_incre - normal_center_cov_std.block<3, 3>(0, 0);
+                printM(n_q_cov_incre, "n_q_cov_incre");
+                M3D n_q_cov_diff = n_q_cov_incre.block<3,3>(0,0) - normal_center_cov_std.block<3,3>(0,0);
                 printM(n_q_cov_diff, "n_q_cov_diff");
-//                M6D n_c_cov_diff2 = normal_center_cov_tmp2 - normal_center_cov_std;
-//                printM(n_c_cov_diff2, "normal center cov diff2");
+//                M3D n_cov_incre = n_q_cov_incre.block<3, 3>(0, 0);
+//                printM(n_cov_incre, "normal cov incre");
+//                M3D n_q_cov_diff = n_cov_incre - normal_center_cov_std.block<3, 3>(0, 0);
+//                printM(n_q_cov_diff, "n_q_cov_diff");
 
                 points_old = points_new;
                 points_cov_old = points_cov_new;
