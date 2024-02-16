@@ -650,9 +650,10 @@ int main(int argc, char** argv) {
                 PCAEigenSolver(cov_incre, eigen_vec_tmp, eigen_values_tmp);
                 double t_es_ = t_c_es.toc();
 //                calcNormalCov(points_new, eigen_vec_tmp, eigen_values_tmp, center_incre, normal_center_cov_tmp2);
-                calcNormalCovIncremental(points_new, eigen_vec_old, eigen_values_old, center_old, Jnq_p_old,
-                                         n_q_cov_old, eigen_vec_new, eigen_values_new, n_q_cov_incre,
-                                         Jnq_p_incre);
+//                calcNormalCovIncremental(points_new, eigen_vec_old, eigen_values_old, center_old, Jnq_p_old,
+//                                         n_q_cov_old, eigen_vec_new, eigen_values_new, n_q_cov_incre, Jnq_p_incre);
+                calcNormalCovIncremental(points_new, eigen_vec_old, eigen_values_old, center_old,
+                                         n_q_cov_old, eigen_vec_new, eigen_values_new, n_q_cov_incre);
                 double t_c_es_incre = t_c_es.toc();
                 printf("incremental normal cov cost: %fms\n", t_incre1 + t_c_es_incre);
                 printf("Cov: %fms ES: %fms Normal Cov: %fms\n", t_incre1, t_es_, t_c_es_incre - t_es_);
