@@ -357,9 +357,10 @@ void CovEigenSolverNormalCov(const vector<V3D>& points, M3D & eigen_vectors, V3D
 
 
 // CovEigenSolverNormalCov, code from VoxelMap
-void CovEigenSolverNormalCov(const vector<V3D>& points, M3D & eigen_vectors, V3D & eigen_values,
-                             vector<M63D> & Jn_p, M6D & plane_cov)
+void CovEigenSolverNormalCov(const vector<V3D>& points, const vector<M3D> & points_cov, M3D & eigen_vectors,
+                             V3D & eigen_values, vector<M63D> & Jn_p, M6D & plane_cov)
 {
+    assert(points.size() == points_cov.size());
     TicToc t_start;
     plane_cov = M6D::Zero();
     M3D covariance = Eigen::Matrix3d::Zero();
@@ -428,7 +429,7 @@ void CovEigenSolverNormalCov(const vector<V3D>& points, M3D & eigen_vectors, V3D
 
         Jn_p[i] = J;
 //        plane_cov += J * points[i].cov * J.transpose();
-        plane_cov += J * M3D::Identity() * J.transpose();
+        plane_cov += J * points_cov[i] * J.transpose();
 //            const pointWithCov & pv = points[i];
 //            double cos_theta = abs(plane->normal.dot(pv.normal.cast<double>())); // [0, 1.0]
 ////        double sin_theta2 = 1 - cos_theta * cos_theta;
@@ -935,10 +936,10 @@ void JacobianLambda(const vector<V3D> & points, const M3D & eigen_vectors,
         Jpi[i].row(0) = center2point.transpose() * uk_ukt[0];
         Jpi[i].row(1) = center2point.transpose() * uk_ukt[1];
         Jpi[i].row(2) = center2point.transpose() * uk_ukt[2];
-
-        cov_lambda1 += Jpi[i].row(0) * M3D::Identity() * Jpi[i].row(0).transpose();
-        cov_lambda2 += Jpi[i].row(1) * M3D::Identity() * Jpi[i].row(1).transpose();
-        cov_lambda3 += Jpi[i].row(2) * M3D::Identity() * Jpi[i].row(2).transpose();
+//
+//        cov_lambda1 += Jpi[i].row(0) * M3D::Identity() * Jpi[i].row(0).transpose();
+//        cov_lambda2 += Jpi[i].row(1) * M3D::Identity() * Jpi[i].row(1).transpose();
+//        cov_lambda3 += Jpi[i].row(2) * M3D::Identity() * Jpi[i].row(2).transpose();
     }
 }
 
@@ -1010,9 +1011,10 @@ double incrementalJacobianLambda(const vector<V3D> & points, const M3D & eigen_v
     return term_2[0].norm();
 }
 
-void calcNormalCov(const vector<V3D> & points, const M3D & eigen_vectors, const V3D & eigen_values,
+void calcNormalCov(const vector<V3D> & points, const vector<M3D> & points_cov, const M3D & eigen_vectors, const V3D & eigen_values,
                    const V3D& center, M6D & plane_cov)
 {
+    assert(points.size() == points_cov.size());
     const V3D & evecMin = eigen_vectors.col(0);
     const V3D & evecMid = eigen_vectors.col(1);
     const V3D & evecMax = eigen_vectors.col(2);
@@ -1035,7 +1037,7 @@ void calcNormalCov(const vector<V3D> & points, const M3D & eigen_vectors, const 
         J.block<3, 3>(3, 0) = J_Q;
 
 //        plane_cov += J * points[i].cov * J.transpose();
-        plane_cov += J * M3D::Identity() * J.transpose();
+        plane_cov += J * points_cov[i] * J.transpose();
 //            const pointWithCov & pv = points[i];
 //            double cos_theta = abs(plane->normal.dot(pv.normal.cast<double>())); // [0, 1.0]
 ////        double sin_theta2 = 1 - cos_theta * cos_theta;
@@ -1047,11 +1049,10 @@ void calcNormalCov(const vector<V3D> & points, const M3D & eigen_vectors, const 
 }
 
 
-void calcNormalCovIncremental(const vector<V3D> & points, const M3D & eigen_vectors_old, const V3D & eigen_values_old,
-                              const V3D& center_old, const vector<M63D> & Jnq_p_old, const M6D & nq_cov_old,
-                              const M3D & eigen_vectors_new,
-                              const V3D & eigen_values_new, M6D & plane_cov,
-                              vector<M63D> & Jnq_p)
+void calcNormalCovIncremental(const vector<V3D> & points, const vector<M3D> & points_cov, const M3D & eigen_vectors_old,
+                              const V3D & eigen_values_old, const V3D& center_old, const vector<M63D> & Jnq_p_old,
+                              const M6D & nq_cov_old, const M3D & eigen_vectors_new, const V3D & eigen_values_new,
+                              M6D & plane_cov, vector<M63D> & Jnq_p)
 {
     double n = (double)points.size();
 //    double scale_1 = (n - 1.0) / n; // sacle 1: number of points
@@ -1099,7 +1100,7 @@ void calcNormalCovIncremental(const vector<V3D> & points, const M3D & eigen_vect
         J.block<3, 3>(3, 0) = J_Q;
 
 //        plane_cov += J * points[i].cov * J.transpose();
-        plane_cov += J * M3D::Identity() * J.transpose();
+        plane_cov += J * points_cov[i] * J.transpose();
         Jnq_p[i] = J;
 
 //            const pointWithCov & pv = points[i];
@@ -1123,14 +1124,16 @@ void calcNormalCovIncremental(const vector<V3D> & points, const M3D & eigen_vect
     J.block<3, 3>(3, 0) = J_Q;
 
     Jnq_p.back().block<3,3> (0, 0) = J_n;
-    plane_cov += J * M3D::Identity() * J.transpose();
+    plane_cov += J * points_cov.back() * J.transpose();
 //    Jnq_p.back().block<3, 3>(3, 0) = J_Q;
 }
 
-double calcNormalCovIncremental(const vector<V3D> & points, const M3D & eigen_vectors_old, const V3D & eigen_values_old,
-                              const V3D& center_old, const M6D & nq_cov_old, const M3D & eigen_vectors_new,
-                              const V3D & eigen_values_new, M6D & plane_cov)
+double calcNormalCovIncremental(const vector<V3D> & points, const vector<M3D> & points_cov, const M3D & eigen_vectors_old,
+                                const V3D & eigen_values_old, const V3D& center_old, const M6D & nq_cov_old,
+                                const M3D & eigen_vectors_new, const V3D & eigen_values_new, M6D & plane_cov)
 {
+    assert(points.size() == points_cov.size());
+
     double n = (double)points.size();
 
     const V3D & Vk_min = eigen_vectors_new.col(0); // eigen vector of n points covirance
@@ -1192,7 +1195,7 @@ double calcNormalCovIncremental(const vector<V3D> & points, const M3D & eigen_ve
     J.block<3, 3>(3, 0) = J_Q;
 
 //    Jnq_p.back().block<3,3> (0, 0) = J_n;
-    plane_cov.block<3, 3>(0, 0) += J_n * M3D::Identity() * J_n.transpose();
+    plane_cov.block<3, 3>(0, 0) += J_n * points_cov.back() * J_n.transpose();
 //    Jnq_p.back().block<3, 3>(3, 0) = J_Q;
     return diff_magnitude;
 }

@@ -547,7 +547,7 @@ int main(int argc, char** argv) {
 
         vector<M63D> Jnq_p_old;
         M6D n_q_cov_old;
-        CovEigenSolverNormalCov(points_old, eigen_vec_old, eigen_values_old, Jnq_p_old, n_q_cov_old);
+        CovEigenSolverNormalCov(points_old, points_cov_old, eigen_vec_old, eigen_values_old, Jnq_p_old, n_q_cov_old);
 
         double m = cloud.size();
         M3D cov_incre = cov_1;
@@ -641,7 +641,8 @@ int main(int argc, char** argv) {
                 M6D normal_center_cov_std;
                 vector<M63D> Jnq_p_std;
                 TicToc t_es;
-                CovEigenSolverNormalCov(points_new, eigen_vec_std, eigen_values_std, Jnq_p_std, normal_center_cov_std);
+                CovEigenSolverNormalCov(points_new, points_cov_new, eigen_vec_std, eigen_values_std, Jnq_p_std,
+                                        normal_center_cov_std);
 //                EigenSolverNormalCov(cov_new, points_new, center_new, eigen_vec_std, eigen_values_std, normal_center_cov_std);
                 printf("\nVoxelMap Eigen Solver & normal Cov cost: %fms\n", t_es.toc());
 
@@ -657,10 +658,10 @@ int main(int argc, char** argv) {
 //                                         n_q_cov_old, eigen_vec_new, eigen_values_new, n_q_cov_incre, Jnq_p_incre);
                 double normal_cov_diff;
                 normal_cov_diff =
-                        calcNormalCovIncremental(points_new, eigen_vec_old, eigen_values_old, center_old,
+                        calcNormalCovIncremental(points_new, points_cov_new, eigen_vec_old, eigen_values_old, center_old,
                                                  n_q_cov_old, eigen_vec_new, eigen_values_new, n_q_cov_incre);
                 if (normal_cov_diff > normal_cov_threshold)
-                    calcNormalCov(points_new, eigen_vec_new, eigen_values_new, center_incre, n_q_cov_incre);
+                    calcNormalCov(points_new, points_cov_new, eigen_vec_new, eigen_values_new, center_incre, n_q_cov_incre);
                 double t_c_es_incre = t_c_es.toc();
 
                 if (normal_cov_diff > normal_cov_threshold)
