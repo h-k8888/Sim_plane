@@ -1186,6 +1186,11 @@ void calcNormalCovIncremental(const vector<V3D> & points, const M3D & eigen_vect
     scale_matrix = eigen_vectors_new * scale_matrix;
     plane_cov.block<3, 3>(0, 0) = scale_matrix * nq_cov_old.block<3, 3>(0, 0) * scale_matrix.transpose();
 
+    M3D top_right = scale_matrix * nq_cov_old.block<3, 3>(0, 3) * (n - 1) / n;
+    plane_cov.block<3, 3>(0, 3) = top_right;
+    plane_cov.block<3, 3>(3, 0) = top_right.transpose();
+    plane_cov.block<3, 3>(3, 3) = M3D::Identity() / n;
+
 //    for (int i = 0; i < points.size() - 1; i++)
 //    {
 //        Eigen::Matrix<double, 6, 3> J;
@@ -1211,7 +1216,7 @@ void calcNormalCovIncremental(const vector<V3D> & points, const M3D & eigen_vect
     J.block<3, 3>(3, 0) = J_Q;
 
 //    Jnq_p.back().block<3,3> (0, 0) = J_n;
-    plane_cov += J * M3D::Identity() * J.transpose();
+    plane_cov.block<3, 3>(0, 0) += J_n * M3D::Identity() * J_n.transpose();
 //    Jnq_p.back().block<3, 3>(3, 0) = J_Q;
 }
 
