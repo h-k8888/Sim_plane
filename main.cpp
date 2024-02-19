@@ -42,7 +42,7 @@ double incident_cov_max, incident_cov_scale;
 
 int refine_maximum_iter;
 bool refine_normal_en, incre_cov_en, incre_derivative_en;
-double incre_points = 20;
+//double incre_points = 20;
 
 
 //plane parameters
@@ -63,6 +63,8 @@ vector<pointWithCov> pointWithCov_all;
 
 // incremental cov
 double lambda_cov_threshold, normal_cov_threshold;
+int num_points_incre_min, num_points_incre_interval;
+bool print_lambda_cov_diff, print_nq_cov_diff;
 
 void generatePlane()
 {
@@ -291,10 +293,11 @@ void readParams()
     incident_cov_scale = tag_settting.get<double>("incident_cov_scale", 0.0);
     refine_maximum_iter = tag_settting.get<int>("refine_maximum_iter", 0);
     refine_normal_en = tag_settting.get<bool>("refine_normal_en", false);
-    incre_points = tag_settting.get<double>("incre_points", 0);
+//    incre_points = tag_settting.get<double>("incre_points", 0);
     incre_cov_en = tag_settting.get<bool>("incre_cov_en", false);
 
     noise_type = tag_settting.get<int>("noise_type", 1);
+    printf("plane params:\n");
     printf("noise_type: %d\nnormal_pert: %.3f\nrange_stddev: %.3f\nbearing_stddev_deg: %.3f\n",
            noise_type, normal_pert, range_stddev, bearing_stddev_deg);
     printf("incident_max: %.3f\nincident_cov_max: %.3f\nincident_cov_scale:%.3f\nrefine_maximum_iter: %d\n",
@@ -302,9 +305,16 @@ void readParams()
 
     tag_settting = m_pt.get_child("incremental_derivative");
     incre_derivative_en = tag_settting.get<bool>("incre_derivative_en", false);
+    num_points_incre_min = tag_settting.get<int>("num_points_incre_min", 100);
+    num_points_incre_interval = tag_settting.get<int>("num_points_incre_interval", 100);
     lambda_cov_threshold = tag_settting.get<double>("lambda_cov_threshold", 0.0);
     normal_cov_threshold = tag_settting.get<double>("normal_cov_threshold", 0.0);
-    printf("lambda_cov_threshold: %e\nnormal_cov_threshold: %e\n\n", lambda_cov_threshold, normal_cov_threshold);
+    print_lambda_cov_diff = tag_settting.get<bool>("print_lambda_cov_diff", true);
+    print_nq_cov_diff = tag_settting.get<bool>("print_nq_cov_diff", true);
+
+    printf("\nincremental params:\n");
+    printf("num_points_incre_min: %d\nnum_points_incre_interval: %d\nlambda_cov_threshold: %e\nnormal_cov_threshold: %e\n\n",
+           num_points_incre_min, num_points_incre_interval, lambda_cov_threshold, normal_cov_threshold);
 
     lidar_width = plane_width * 3.0;
     bearing_stddev = DEG2RAD(bearing_stddev_deg);
@@ -506,19 +516,19 @@ int main(int argc, char** argv) {
     if (incre_cov_en || incre_derivative_en)
     {
         printf("\n****** incremental **********\n");
-        M3D cov_1;
-        V3D center_1;
-        vector<V4D> cloud_1(cloud.begin(), cloud.end() - incre_points);
-        calcCovMatrix(cloud_1, cov_1, center_1);
+        M3D cov_start;
+        V3D center_start;
+        vector<V4D> cloud_start(cloud.begin(), cloud.begin() + num_points_incre_min);
+        calcCovMatrix(cloud_start, cov_start, center_start);
         if (incre_cov_en) {
-            printM(cov_1, "cov n - 1");
-            printV(center_1, "center n - 1");
+            printM(cov_start, "cov_start");
+            printV(center_start, "center_start");
         }
 
         // set variance before iterative
-        vector<V3D> points_old(cloud.size() - incre_points);
+        vector<V3D> points_old(num_points_incre_min);
 //        printf("points_cov.size() %d", (int)points_cov.size());
-        vector<M3D> points_cov_old(points_cov.size() - incre_points);
+        vector<M3D> points_cov_old(num_points_incre_min);
         for (int i = 0; i < points_old.size(); ++i) {
             points_old[i] = cloud[i].head(3);
             points_cov_old[i] = points_cov[i];
@@ -550,9 +560,10 @@ int main(int argc, char** argv) {
         CovEigenSolverNormalCov(points_old, points_cov_old, eigen_vec_old, eigen_values_old, Jnq_p_old, n_q_cov_old);
 
         double m = cloud.size();
-        M3D cov_incre = cov_1;
-        V3D center_incre = center_1;
-        for (int i = cloud.size() - incre_points; i < m; ++i) {
+        M3D cov_incre = cov_start;
+        V3D center_incre = center_start;
+        int points_size_nqcov = num_points_incre_min;
+        for (int i = num_points_incre_min; i < m; ++i) {
             TicToc t_cc_inc;
             double n = i + 1;
             const V3D &xn = cloud[i].head(3);
@@ -561,6 +572,8 @@ int main(int argc, char** argv) {
             cov_incre = (n - 1) / n * (cov_incre + (xn_mn_1 * xn_mn_1.transpose()) / n);
             center_incre = center_incre / n * (n - 1) + xn / n;
             double t_incre1 = t_cc_inc.toc();
+
+            int num_points_now_last_std = i - points_size_nqcov;
 
             if (incre_derivative_en)
             {
@@ -591,48 +604,60 @@ int main(int argc, char** argv) {
                 // compute lambda cov
                 calcLambdaCov(points_cov_new, Jpi_new, lambda_cov_new);
                 double t_std3 = t_std.toc();
-                printf("standard cost: %fms\ncenter & cov: %f derivatie %f lambda cov: %f\n",
+                printf("std lambda cov cost: %fms\ncenter & cov: %f derivatie %f lambda cov: %f\n",
                        t_std3, t_std1, t_std2 - t_std1, t_std3 - t_std2);
                 // cov as I for test only
                 vector<double> lambda_cov_I_new;
                 calcLambdaCov(points_cov_I, Jpi_new, lambda_cov_I_new); // in fact, JtJ
 
-                // incremental
-//                vector<V3D> Jpi_incre;
+
                 vector<M3D> Jpi_incre;
                 vector<double> lambda_cov_incre;
                 vector<double> lambda_cov_I_incre;
-                TicToc t_de_incre;
-                double d_lambda0 = incrementalJacobianLambda(points_new, eigen_vec_old, center_old,
-                                                             eigen_vec_new, center_new, Jpi_incre);
-                double t_de_incre1 = t_de_incre.toc();
-                if (d_lambda0 <= lambda_cov_threshold) {
-                    calcLambdaCovIncremental(points_cov_new, Jpi_incre, lambda_cov_old, lambda_cov_incre);
-                    double t_de_incre2 = t_de_incre.toc();
-                    printf("incremental cost: %fms\ncenter & cov %f derivatie %f lambda cov: %f\n",
-                           t_de_incre2 + t_incre1, t_incre1, t_de_incre1, t_de_incre2 - t_de_incre1);
 
-//                    calcLambdaCovIncremental(points_cov_I, Jpi_incre, lambda_cov_I_old, lambda_cov_I_incre);
+                bool calc_std_form = false;
+                if (num_points_now_last_std >= num_points_incre_interval)
+                {
+                    JacobianLambda(points_new, eigen_vec_new, center_new, Jpi_new);
+                    calcLambdaCov(points_cov_new, Jpi_new, lambda_cov_incre);
+                    points_size_nqcov = i;
+                    calc_std_form = true;
+                    printf("******reach max incremental interval.******\n");
+                    printf("******compute lambda cov in std form******\n");
                 }
                 else {
-                    calcLambdaCov(points_cov_new, Jpi_incre, lambda_cov_incre);
-                    double t_de_incre2 = t_de_incre.toc();
-                    printf("***unvalid*** incremental cost: %fms\ncenter & cov %f derivatie %f lambda cov: %f\n",
-                           t_de_incre2 + t_incre1, t_incre1, t_de_incre1, t_de_incre2 - t_de_incre1);
+                    TicToc t_de_incre;
+                    double d_lambda0 = incrementalJacobianLambda(points_new, eigen_vec_old, center_old,
+                                                                 eigen_vec_new, center_new, Jpi_incre);
+                    double t_de_incre1 = t_de_incre.toc();
+                    if (d_lambda0 <= lambda_cov_threshold) {
+                        calcLambdaCovIncremental(points_cov_new, Jpi_incre, lambda_cov_old, lambda_cov_incre);
+                        double t_de_incre2 = t_de_incre.toc();
+                        printf("incremental cost: %fms\ncenter & cov %f derivatie %f lambda cov: %f\n",
+                               t_de_incre2 + t_incre1, t_incre1, t_de_incre1, t_de_incre2 - t_de_incre1);
 
+//                    calcLambdaCovIncremental(points_cov_I, Jpi_incre, lambda_cov_I_old, lambda_cov_I_incre);
+                    } else {
+                        calcLambdaCov(points_cov_new, Jpi_incre, lambda_cov_incre);
+                        double t_de_incre2 = t_de_incre.toc();
+                        printf("***unvalid*** incremental cost: %fms\ncenter & cov %f derivatie %f lambda cov: %f\n",
+                               t_de_incre2 + t_incre1, t_incre1, t_de_incre1, t_de_incre2 - t_de_incre1);
+                        points_size_nqcov = i + 1;
+                        calc_std_form = true;
 //                    calcLambdaCov(points_cov_I, Jpi_incre, lambda_cov_I_incre);
+                    }
+                    printf("d lambda d p_I magnitude: %e\n", d_lambda0);
                 }
-                printf("d lambda d p_I magnitude: %e\n", d_lambda0);
-
-//                printf("diff lambda cov(I): incre - standard\n");
-//                for (int k = 0; k < 3; ++k) {
-//                    printf("lambda %d: %e - %e = %e\n", k,
-//                           lambda_cov_I_incre[k], lambda_cov_I_new[k], lambda_cov_I_incre[k] - lambda_cov_I_new[k]);
-//                }
-                printf("diff lambda cov(point): incre - standard\n");
-                for (int k = 0; k < 3; ++k) {
-                    printf("lambda %d: %e - %e = %e\n", k,
-                           lambda_cov_incre[k], lambda_cov_new[k], lambda_cov_incre[k] - lambda_cov_new[k]);
+                double lambda_cov_diff = 0;
+                for (int j = 0; j <3; ++j)
+                    lambda_cov_diff += lambda_cov_incre[j] - lambda_cov_new[j];
+                printf("lambda cov diff sum: %e\n", lambda_cov_diff);
+                if (print_lambda_cov_diff) {
+                    printf("diff lambda cov(point): incre - standard\n");
+                    for (int k = 0; k < 3; ++k) {
+                        printf("lambda %d: %e - %e = %e\n", k,
+                               lambda_cov_incre[k], lambda_cov_new[k], lambda_cov_incre[k] - lambda_cov_new[k]);
+                    }
                 }
 
                 // normal cov
@@ -656,20 +681,31 @@ int main(int argc, char** argv) {
 //                calcNormalCov(points_new, eigen_vec_tmp, eigen_values_tmp, center_incre, normal_center_cov_tmp2);
 //                calcNormalCovIncremental(points_new, eigen_vec_old, eigen_values_old, center_old, Jnq_p_old,
 //                                         n_q_cov_old, eigen_vec_new, eigen_values_new, n_q_cov_incre, Jnq_p_incre);
-                double normal_cov_diff;
-                normal_cov_diff =
-                        calcNormalCovIncremental(points_new, points_cov_new, eigen_vec_old, eigen_values_old, center_old,
-                                                 n_q_cov_old, eigen_vec_new, eigen_values_new, n_q_cov_incre);
-                if (normal_cov_diff > normal_cov_threshold)
-                    calcNormalCov(points_new, points_cov_new, eigen_vec_new, eigen_values_new, center_incre, n_q_cov_incre);
-                double t_c_es_incre = t_c_es.toc();
 
-                if (normal_cov_diff > normal_cov_threshold)
-                    printf("**unvalid*** incremental normal cov cost: %fms\n", t_incre1 + t_c_es_incre);
+                if (calc_std_form)
+                {
+                    calcNormalCov(points_new, points_cov_new, eigen_vec_new, eigen_values_new, center_incre, n_q_cov_incre);
+                    printf("******reach max incremental interval.******\n");
+                    printf("******compute normal, center cov in std form******\n");
+                }
                 else
-                    printf("valid incremental normal cov cost: %fms\n", t_incre1 + t_c_es_incre);
-                printf("normal cov diff magnitude: %e\n", normal_cov_diff);
-                printf("Cov: %fms ES: %fms Normal Cov: %fms\n", t_incre1, t_es_, t_c_es_incre - t_es_);
+                {
+                    double normal_cov_diff;
+                    normal_cov_diff =
+                            calcNormalCovIncremental(points_new, points_cov_new, eigen_vec_old, eigen_values_old,
+                                                     center_old,
+                                                     n_q_cov_old, eigen_vec_new, eigen_values_new, n_q_cov_incre);
+                    if (normal_cov_diff > normal_cov_threshold)
+                        calcNormalCov(points_new, points_cov_new, eigen_vec_new, eigen_values_new, center_incre,
+                                      n_q_cov_incre);
+                    double t_c_es_incre = t_c_es.toc();
+
+                    if (normal_cov_diff > normal_cov_threshold)
+                        printf("**unvalid*** incremental normal cov cost: %fms\n", t_incre1 + t_c_es_incre);
+                    else
+                        printf("valid incremental normal cov cost: %fms\n", t_incre1 + t_c_es_incre);
+                    printf("normal cov diff magnitude: %e\n", normal_cov_diff);
+                    printf("Cov: %fms ES: %fms Normal Cov: %fms\n", t_incre1, t_es_, t_c_es_incre - t_es_);
 
 //                for (int j = 0; j < points_new.size(); ++j) {
 //                    M3D j_std = Jnq_p_std[j].block<3,3>(0,0);
@@ -680,14 +716,15 @@ int main(int argc, char** argv) {
 //                    printM(dndp, to_string(j) + " dndp diff");
 //                }
 
-                printM(normal_center_cov_std, "normal_center_cov_std");
-                printM(n_q_cov_incre, "n_q_cov_incre");
-                M6D n_q_cov_diff = n_q_cov_incre - normal_center_cov_std;
-                printM(n_q_cov_diff, "n_q_cov_diff");
-//                M3D n_cov_incre = n_q_cov_incre.block<3, 3>(0, 0);
-//                printM(n_cov_incre, "normal cov incre");
-//                M3D n_q_cov_diff = n_cov_incre - normal_center_cov_std.block<3, 3>(0, 0);
-//                printM(n_q_cov_diff, "n_q_cov_diff");
+                    if (print_nq_cov_diff) {
+                        printM(normal_center_cov_std, "normal_center_cov_std");
+                        printM(n_q_cov_incre, "n_q_cov_incre");
+                        M6D n_q_cov_diff = n_q_cov_incre - normal_center_cov_std;
+                        printM(n_q_cov_diff, "n_q_cov_diff");
+                    }
+                }
+                printf("normal center cov trace diff: %e\n", (n_q_cov_incre - normal_center_cov_std).trace());
+
 
                 points_old = points_new;
                 points_cov_old = points_cov_new;
@@ -710,5 +747,25 @@ int main(int argc, char** argv) {
             printV((center - center_incre), "center diff");
         }
     }
+
+//    printf("\n..............Saving path................\n");
+//    printf("path file: %s\n", pos_target_dir.c_str());
+//    ofstream of(pos_target_dir);
+//    if (of.is_open())
+//    {
+//        of.setf(ios::fixed, ios::floatfield);
+//        of.precision(6);
+//        for (int i = 0; i < (int)path_target.poses.size(); ++i) {
+//            of<< path_target.poses[i].header.stamp.toSec()<< " "
+//              <<path_target.poses[i].pose.position.x<< " "
+//              <<path_target.poses[i].pose.position.y<< " "
+//              <<path_target.poses[i].pose.position.z<< " "
+//              <<path_target.poses[i].pose.orientation.x<< " "
+//              <<path_target.poses[i].pose.orientation.y<< " "
+//              <<path_target.poses[i].pose.orientation.z<< " "
+//              <<path_target.poses[i].pose.orientation.w<< "\n";
+//        }
+//        of.close();
+//    }
 
 }
