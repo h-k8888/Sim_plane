@@ -682,7 +682,7 @@ int main(int argc, char** argv) {
 
                 printM(normal_center_cov_std, "normal_center_cov_std");
                 printM(n_q_cov_incre, "n_q_cov_incre");
-                M3D n_q_cov_diff = n_q_cov_incre.block<3,3>(0,0) - normal_center_cov_std.block<3,3>(0,0);
+                M6D n_q_cov_diff = n_q_cov_incre - normal_center_cov_std;
                 printM(n_q_cov_diff, "n_q_cov_diff");
 //                M3D n_cov_incre = n_q_cov_incre.block<3, 3>(0, 0);
 //                printM(n_cov_incre, "normal cov incre");
