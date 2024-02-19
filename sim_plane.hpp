@@ -1184,12 +1184,12 @@ double calcNormalCovIncremental(const vector<V3D> & points, const vector<M3D> & 
     plane_cov.block<3, 3>(3, 3) = nq_cov_old.block<3, 3>(3, 3) * pow((n - 1.0), 2) / (n * n);
 
     /// for the new point
-    double scale_n = (n - 1.0) / (n * n); //todo
+    double scale_n = (n - 1.0) / (n * n);
     V3D term_n_mid = scale_n / lambda_k_min_mid * (cos_mid * Vk_min + cos_min * Vk_mid);
     V3D term_n_max = scale_n / lambda_k_min_max * (cos_max * Vk_min + cos_min * Vk_max);
     M3D J_n = M3D::Zero();
-    J_n.row(1) = term_n_mid;
-    J_n.row(2) = term_n_max;
+    J_n.row(1) = term_n_mid.transpose();
+    J_n.row(2) = term_n_max.transpose();
     J_n = eigen_vectors_new * J_n;
 
     plane_cov.block<3, 3>(0, 0) += J_n * points_cov.back() * J_n.transpose();
