@@ -399,13 +399,10 @@ void CovEigenSolverNormalCov(const vector<V3D>& points, const vector<M3D> & poin
     Eigen::Matrix3d J_Q;
     J_Q << 1.0 / points_size, 0, 0, 0, 1.0 / points_size, 0, 0, 0,
             1.0 / points_size;
-//    if (evalsReal(evalsMin) < 0.1) {
 
-//        plane->normal << evecs.real()(0, evalsMin), evecs.real()(1, evalsMin),
-//                evecs.real()(2, evalsMin);
-//        double t3 = omp_get_wtime();
-//    std::vector<int> index(points.size());
-//    std::vector<Eigen::Matrix<double, 6, 6>> temp_matrix(points.size());
+//    M3D center_cov = M3D::Zero();
+//    M3D center_cov2 = M3D::Zero();
+
     Jn_p.resize(points.size());
     for (int i = 0; i < points.size(); i++) {
         Eigen::Matrix<double, 6, 3> J;
@@ -430,14 +427,12 @@ void CovEigenSolverNormalCov(const vector<V3D>& points, const vector<M3D> & poin
         Jn_p[i] = J;
 //        plane_cov += J * points[i].cov * J.transpose();
         plane_cov += J * points_cov[i] * J.transpose();
-//            const pointWithCov & pv = points[i];
-//            double cos_theta = abs(plane->normal.dot(pv.normal.cast<double>())); // [0, 1.0]
-////        double sin_theta2 = 1 - cos_theta * cos_theta;
-//            double roughness = (1 - cos_theta) * roughness_cov_scale;
-//            M3D point_cov = pv.cov + roughness * M3D::Identity() +
-//                            calcIncidentCovScale(pv.ray, pv.p2lidar,  plane->normal) * pv.ray * pv.ray.transpose();
-//            plane->plane_cov += J * point_cov * J.transpose();
+
+//        center_cov += J_Q * points_cov[i] * J_Q.transpose();
+//        center_cov2 += points_cov[i] / (points_size * points_size);
     }
+//    printM(center_cov, "center_cov");
+//    printM(center_cov2, "center_cov2");
 }
 
 void saveCloud(const vector<V4D> & cloud, string& file)
@@ -1024,6 +1019,8 @@ void calcNormalCov(const vector<V3D> & points, const vector<M3D> & points_cov, c
     Eigen::Matrix3d J_Q;
     J_Q << 1.0 / points_size, 0, 0, 0, 1.0 / points_size, 0, 0, 0,
             1.0 / points_size;
+//    M3D center_cov = M3D::Zero();
+//    M3D center_cov2 = M3D::Zero();
     for (int i = 0; i < points.size(); i++) {
         Eigen::Matrix<double, 6, 3> J;
         Eigen::Matrix3d F = M3D::Zero();
@@ -1038,6 +1035,8 @@ void calcNormalCov(const vector<V3D> & points, const vector<M3D> & points_cov, c
 
 //        plane_cov += J * points[i].cov * J.transpose();
         plane_cov += J * points_cov[i] * J.transpose();
+//        center_cov += J_Q * points_cov[i] * J_Q.transpose();
+//        center_cov2 += points_cov[i] / (points_size * points_size);
 //            const pointWithCov & pv = points[i];
 //            double cos_theta = abs(plane->normal.dot(pv.normal.cast<double>())); // [0, 1.0]
 ////        double sin_theta2 = 1 - cos_theta * cos_theta;
@@ -1046,6 +1045,8 @@ void calcNormalCov(const vector<V3D> & points, const vector<M3D> & points_cov, c
 //                            calcIncidentCovScale(pv.ray, pv.p2lidar,  plane->normal) * pv.ray * pv.ray.transpose();
 //            plane->plane_cov += J * point_cov * J.transpose();
     }
+//    printM(center_cov, "center_cov");
+//    printM(center_cov2, "center_cov2");
 }
 
 
@@ -1154,6 +1155,7 @@ double calcNormalCovIncremental(const vector<V3D> & points, const vector<M3D> & 
     double lambda_k1_min_mid = eigen_values_old(0) - eigen_values_old(1); // n-1 points
     double lambda_k1_min_max = eigen_values_old(0) - eigen_values_old(2);
     double scale_1 = (n - 1.0) / n * abs(Vk_min.dot(Vk1_min));
+//    printf("scale_1 %f\n", scale_1);
 
     V3D term_2_mid = (cos_mid * Vk_min + cos_min * Vk_mid) / (n * n * lambda_k_min_mid);
     V3D term_2_max = (cos_max * Vk_min + cos_min * Vk_max) / (n * n * lambda_k_min_max);
@@ -1162,22 +1164,19 @@ double calcNormalCovIncremental(const vector<V3D> & points, const vector<M3D> & 
     if (diff_magnitude > normal_cov_threshold)
         return diff_magnitude;
 
-    double scale_mid = scale_1 * lambda_k1_min_mid / lambda_k_min_mid * abs(Vk_mid.dot(Vk1_mid));
-    double scale_max = scale_1 * lambda_k1_min_max / lambda_k_min_max * abs(Vk_max.dot(Vk1_max));
+    double scale_mid = lambda_k1_min_mid / lambda_k_min_mid * abs(Vk_mid.dot(Vk1_mid));
+    double scale_max = lambda_k1_min_max / lambda_k_min_max * abs(Vk_max.dot(Vk1_max));
 
     int points_size = points.size();
     plane_cov = M6D::Zero();
-    Eigen::Matrix3d J_Q;
-    J_Q << 1.0 / points_size, 0, 0, 0, 1.0 / points_size, 0, 0, 0,
-            1.0 / points_size;
 
     M3D scale_matrix = eigen_vectors_old.transpose();
     scale_matrix.row(1) *= scale_mid;
     scale_matrix.row(2) *= scale_max;
     scale_matrix = eigen_vectors_new * scale_matrix;
-    plane_cov.block<3, 3>(0, 0) = scale_matrix * nq_cov_old.block<3, 3>(0, 0) * scale_matrix.transpose();
+    plane_cov.block<3, 3>(0, 0) = pow(scale_1, 2) * scale_matrix * nq_cov_old.block<3, 3>(0, 0) * scale_matrix.transpose();
 
-    M3D top_right = scale_matrix * nq_cov_old.block<3, 3>(0, 3) * (n - 1) / n;
+    M3D top_right = scale_1 * scale_matrix * nq_cov_old.block<3, 3>(0, 3) * (n - 1) / n;
     plane_cov.block<3, 3>(0, 3) = top_right;
     plane_cov.block<3, 3>(3, 0) = top_right.transpose();
 

@@ -610,8 +610,6 @@ int main(int argc, char** argv) {
             center_incre = center_incre / n * (n - 1) + xn / n;
             double t_incre1 = t_cc_inc.toc();
 
-            int num_points_now_last_std = i - points_size_nqcov;
-
             if (incre_derivative_en)
             {
                 printf("\n***** add point #%d *****\n", i);
@@ -620,6 +618,7 @@ int main(int argc, char** argv) {
                 vector<M3D> points_cov_new = points_cov_old;
                 points_cov_new.push_back(point_cov_i);
                 vector<M3D> points_cov_I(points_new.size(), M3D::Identity()); // for test
+                int num_points_now_last_std = points_new.size() - points_size_nqcov;
 
                 /// PCA SelfAdjoint for all new points
                 M3D eigen_vec_new;
@@ -740,7 +739,7 @@ int main(int argc, char** argv) {
                         printf("**unvalid*** incremental normal cov cost: %fms\n", t_incre1 + t_c_es_incre);
                     else
                         printf("valid incremental normal cov cost: %fms\n", t_incre1 + t_c_es_incre);
-                    printf("normal cov diff magnitude: %e\n", normal_cov_diff);
+//                    printf("normal cov diff magnitude: %e\n", normal_cov_diff);
                     printf("Cov: %fms ES: %fms Normal Cov: %fms\n", t_incre1, t_es_, t_c_es_incre - t_es_);
 
 //                for (int j = 0; j < points_new.size(); ++j) {
@@ -757,9 +756,9 @@ int main(int argc, char** argv) {
                         printM(n_q_cov_incre, "n_q_cov_incre");
                         M6D n_q_cov_diff = n_q_cov_incre - normal_center_cov_std;
                         printM(n_q_cov_diff, "n_q_cov_diff");
+                        printf("normal center cov trace diff: %e\n", (n_q_cov_incre - normal_center_cov_std).trace());
                     }
                 }
-                printf("normal center cov trace diff: %e\n", (n_q_cov_incre - normal_center_cov_std).trace());
 
                 // for output
                 num_points_output.push_back(points_new.size());
@@ -777,6 +776,7 @@ int main(int argc, char** argv) {
                 lambda_cov_old = lambda_cov_incre;
                 lambda_cov_I_old = lambda_cov_I_incre;
                 Jnq_p_old = Jnq_p_incre;
+                n_q_cov_old = n_q_cov_incre;
             }
         }
 
