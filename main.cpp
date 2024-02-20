@@ -51,6 +51,9 @@ double d;
 V3D b1, b2;
 
 string cfg_file("/home/hk/CLionProjects/Sim_plane/cfg.ini");
+string lambda_cov_file("/home/hk/CLionProjects/Sim_plane/lambda_cov");
+string nq_cov_file("/home/hk/CLionProjects/Sim_plane/n_q_cov");
+// todo time cost
 
 vector<V4D> cloud, lidars;
 vector<V3D> cloud_3D;
@@ -65,6 +68,12 @@ vector<pointWithCov> pointWithCov_all;
 double lambda_cov_threshold, normal_cov_threshold;
 int num_points_incre_min, num_points_incre_interval;
 bool print_lambda_cov_diff, print_nq_cov_diff;
+
+//output 
+vector<int> num_points_output;
+vector<vector<double>> lambda_cov_gt, lambda_cov_incre_output;
+vector<M6D> nq_cov_gt, nq_cov_incre_output;
+
 
 void generatePlane()
 {
@@ -350,6 +359,51 @@ void recordCloudWithCov()
     }
 }
 
+void saveLambdaCovFile()
+{
+    printf("\n..............Saving Lambda Cov................\n");
+    printf("Lambda cov file: %s\n", lambda_cov_file.c_str());
+    ofstream of(lambda_cov_file);
+    if (of.is_open())
+    {
+        of << "points ground_trurh(3) incremental(3)" << endl;
+        of.setf(ios::scientific, ios::floatfield);
+        of.precision(6);
+        for (int i = 0; i < (int)num_points_output.size(); ++i) {
+            of<< num_points_output[i] << " "
+              << lambda_cov_gt[i][0] << " " << lambda_cov_gt[i][1] << " " << lambda_cov_gt[i][2] << " "
+              << lambda_cov_incre_output[i][0] << " "
+              << lambda_cov_incre_output[i][1] << " "
+              << lambda_cov_incre_output[i][2] << endl;
+        }
+        of.close();
+    }
+}
+
+void saveNormalCenterCovFile()
+{
+    printf("\n..............Saving normal center Cov................\n");
+    printf("normal center cov file: %s\n", nq_cov_file.c_str());
+    ofstream of(nq_cov_file);
+    if (of.is_open())
+    {
+        of << "points normal_cov_trace_ground_trurh(1) normal_cov_trace_incremental(1) "
+            << "center_cov_trace_ground_trurh(1) center_cov_trace_incremental(1)" <<endl;
+        of.setf(ios::scientific, ios::floatfield);
+        of.precision(6);
+        for (int i = 0; i < (int)num_points_output.size(); ++i) {
+            M3D  n_cov_gt =  nq_cov_gt[i].block<3, 3>(0, 0);
+            M3D  q_cov_gt =  nq_cov_gt[i].block<3, 3>(3, 3);
+            M3D  n_cov_incre =  nq_cov_incre_output[i].block<3, 3>(0, 0);
+            M3D  q_cov_incre =  nq_cov_incre_output[i].block<3, 3>(3, 3);
+            of<< num_points_output[i] << " "
+              << n_cov_gt.trace() << " " << n_cov_incre.trace() << " "
+              << q_cov_gt.trace() << " " << q_cov_incre.trace() << endl;
+        }
+        of.close();
+    }
+}
+
 int main(int argc, char** argv) {
     cout << "hello world" << endl;
 
@@ -482,35 +536,11 @@ int main(int argc, char** argv) {
     }
     // refine normal
 
-//    M3D eigen_vec_std;
-//    V3D eigen_values_std, center_std;
-//    M6D normal_center_cov_std;
-//    TicToc t_es;
-//    CovEigenSolverNormalCov(cloud_3D, eigen_vec_std, eigen_values_std, center_std, normal_center_cov_std);
-//    printf("VoxelMap Eigen Solver Cov cost: %fms\n", t_es.toc());
-//    printM(eigen_vec_std, "PCA Eigen Solver Eigen Vectors");
-//    printV(eigen_values_std, "PCA Eigen Solver Eifen Values");
-
     M3D cloud_cov;
     V3D cloud_center;
     M3D eigen_vec_tmp;
     V3D eigen_values_tmp;
     M6D normal_center_cov_tmp;
-//    TicToc t_c_es;
-//    calcCloudCov(cloud_3D, cloud_cov, cloud_center); // calc cov and center first
-//    CovEigenSolverNormalCov(cloud_cov, cloud_3D, cloud_center, eigen_vec_tmp, eigen_values_tmp, normal_center_cov_tmp);
-//    printf("Cov + Eigen Solver cost: %fms\n", t_es.toc());
-//    M6D n_c_cov_diff = normal_center_cov_tmp - normal_center_cov_std;
-//    printM(n_c_cov_diff, "normal center cov diff");
-
-//    M6D normal_center_cov_tmp2;
-//    TicToc t_c_es;
-//    calcCloudCov(cloud_3D, cloud_cov, cloud_center); // calc cov and center first
-//    PCAEigenSolver(cloud_cov, eigen_vec_tmp, eigen_values_tmp);
-//    calcNormalCov(cloud_3D, eigen_vec_tmp, eigen_values_tmp, cloud_center, normal_center_cov_tmp2);
-//    printf("Cov + ES + Normal Cov cost: %fms\n", t_c_es.toc());
-//    M6D n_c_cov_diff2 = normal_center_cov_tmp2 - normal_center_cov_std;
-//    printM(n_c_cov_diff2, "normal center cov diff2");
 
     // test incremental Cov
     if (incre_cov_en || incre_derivative_en)
@@ -559,6 +589,13 @@ int main(int argc, char** argv) {
         M6D n_q_cov_old;
         CovEigenSolverNormalCov(points_old, points_cov_old, eigen_vec_old, eigen_values_old, Jnq_p_old, n_q_cov_old);
 
+        // for output
+        num_points_output.push_back(points_old.size());
+        lambda_cov_gt.push_back(lambda_cov_old);
+        lambda_cov_incre_output.push_back(lambda_cov_old);
+        nq_cov_gt.push_back(n_q_cov_old);
+        nq_cov_incre_output.push_back(n_q_cov_old);
+
         double m = cloud.size();
         M3D cov_incre = cov_start;
         V3D center_incre = center_start;
@@ -595,21 +632,20 @@ int main(int argc, char** argv) {
 //                vector<V3D> Jpi_new;
                 vector<M3D> Jpi_new;
                 M3D cov_new;
-                vector<double> lambda_cov_new;
+                vector<double> lambda_cov_std;
                 TicToc t_std;
                 calcCloudCov(points_new, cov_new, center_new); // calc cov and center first
                 double t_std1 = t_std.toc();
                 JacobianLambda(points_new, eigen_vec_new, center_new, Jpi_new);
                 double t_std2 = t_std.toc();
                 // compute lambda cov
-                calcLambdaCov(points_cov_new, Jpi_new, lambda_cov_new);
+                calcLambdaCov(points_cov_new, Jpi_new, lambda_cov_std);
                 double t_std3 = t_std.toc();
                 printf("std lambda cov cost: %fms\ncenter & cov: %f derivatie %f lambda cov: %f\n",
                        t_std3, t_std1, t_std2 - t_std1, t_std3 - t_std2);
                 // cov as I for test only
                 vector<double> lambda_cov_I_new;
                 calcLambdaCov(points_cov_I, Jpi_new, lambda_cov_I_new); // in fact, JtJ
-
 
                 vector<M3D> Jpi_incre;
                 vector<double> lambda_cov_incre;
@@ -650,13 +686,13 @@ int main(int argc, char** argv) {
                 }
                 double lambda_cov_diff = 0;
                 for (int j = 0; j <3; ++j)
-                    lambda_cov_diff += lambda_cov_incre[j] - lambda_cov_new[j];
+                    lambda_cov_diff += lambda_cov_incre[j] - lambda_cov_std[j];
                 printf("lambda cov diff sum: %e\n", lambda_cov_diff);
                 if (print_lambda_cov_diff) {
                     printf("diff lambda cov(point): incre - standard\n");
                     for (int k = 0; k < 3; ++k) {
                         printf("lambda %d: %e - %e = %e\n", k,
-                               lambda_cov_incre[k], lambda_cov_new[k], lambda_cov_incre[k] - lambda_cov_new[k]);
+                               lambda_cov_incre[k], lambda_cov_std[k], lambda_cov_incre[k] - lambda_cov_std[k]);
                     }
                 }
 
@@ -725,6 +761,12 @@ int main(int argc, char** argv) {
                 }
                 printf("normal center cov trace diff: %e\n", (n_q_cov_incre - normal_center_cov_std).trace());
 
+                // for output
+                num_points_output.push_back(points_new.size());
+                lambda_cov_gt.push_back(lambda_cov_std);
+                lambda_cov_incre_output.push_back(lambda_cov_incre);
+                nq_cov_gt.push_back(normal_center_cov_std);
+                nq_cov_incre_output.push_back(n_q_cov_incre);
 
                 points_old = points_new;
                 points_cov_old = points_cov_new;
@@ -748,24 +790,6 @@ int main(int argc, char** argv) {
         }
     }
 
-//    printf("\n..............Saving path................\n");
-//    printf("path file: %s\n", pos_target_dir.c_str());
-//    ofstream of(pos_target_dir);
-//    if (of.is_open())
-//    {
-//        of.setf(ios::fixed, ios::floatfield);
-//        of.precision(6);
-//        for (int i = 0; i < (int)path_target.poses.size(); ++i) {
-//            of<< path_target.poses[i].header.stamp.toSec()<< " "
-//              <<path_target.poses[i].pose.position.x<< " "
-//              <<path_target.poses[i].pose.position.y<< " "
-//              <<path_target.poses[i].pose.position.z<< " "
-//              <<path_target.poses[i].pose.orientation.x<< " "
-//              <<path_target.poses[i].pose.orientation.y<< " "
-//              <<path_target.poses[i].pose.orientation.z<< " "
-//              <<path_target.poses[i].pose.orientation.w<< "\n";
-//        }
-//        of.close();
-//    }
-
+    saveLambdaCovFile();
+    saveNormalCenterCovFile();
 }
