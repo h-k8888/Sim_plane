@@ -50,10 +50,11 @@ V3D normal;
 double d;
 V3D b1, b2;
 
-string cfg_file("/home/hk/CLionProjects/Sim_plane/cfg.ini");
-string lambda_cov_file("/home/hk/CLionProjects/Sim_plane/lambda_cov");
-string nq_cov_file("/home/hk/CLionProjects/Sim_plane/n_q_cov");
-string time_cost_file("/home/hk/CLionProjects/Sim_plane/time_cost");
+string dir("/home/autolab/Sim_plane/");
+string cfg_file = dir + "cfg.ini";
+string lambda_cov_file  = dir + "lambda_cov";
+string nq_cov_file = dir + "n_q_cov";
+string time_cost_file = dir + "time_cost";
 
 vector<V4D> cloud, lidars;
 vector<V3D> cloud_3D;

@@ -15,7 +15,7 @@
 #include <omp.h>
 #include <Eigen/Dense>
 
-#include "IKFoM_toolkit/esekfom/esekfom.hpp"
+//#include "IKFoM_toolkit/esekfom/esekfom.hpp"
 
 #include "tic_toc.h"
 
@@ -24,7 +24,7 @@
 #endif
 
 //typedef MTK::vect<3, double> vect3;
-typedef MTK::SO3<double> SO3;
+//typedef MTK::SO3<double> SO3;
 //typedef MTK::S2<double, 98090, 10000, 1> S2;
 //typedef MTK::vect<1, double> vect1;
 //typedef MTK::vect<2, double> vect2;
