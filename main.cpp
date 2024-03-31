@@ -50,7 +50,9 @@ V3D normal;
 double d;
 V3D b1, b2;
 
-string dir("/home/autolab/Sim_plane/");
+//string dir("/home/autolab/Sim_plane/");
+string dir("/home/hk/CLionProjects/Sim_plane/");
+
 string cfg_file = dir + "cfg.ini";
 string lambda_cov_file  = dir + "lambda_cov";
 string nq_cov_file = dir + "n_q_cov";
@@ -371,7 +373,7 @@ void saveLambdaCovFile()
     ofstream of(lambda_cov_file);
     if (of.is_open())
     {
-        of << "points ground_trurh(3) incremental(3)" << endl;
+        of << "points lambda_1_BALM lambda_2_BALM lambda_3_BALM lambda_1_LUFA lambda_2_LUFA lambda_3_LUFA" << endl;
         of.setf(ios::scientific, ios::floatfield);
         of.precision(6);
         for (int i = 0; i < (int)num_points_output.size(); ++i) {
@@ -395,8 +397,8 @@ void saveNormalCenterCovFile()
     ofstream of(nq_cov_file);
     if (of.is_open())
     {
-        of << "points normal_cov_trace_ground_trurh(1) normal_cov_trace_incremental(1) "
-            << "center_cov_trace_ground_trurh(1) center_cov_trace_incremental(1)" <<endl;
+        of << "points normal_cov_trace_BALM normal_cov_trace_LUFA "
+            << "center_cov_trace_BALM center_cov_trace_LUFA" <<endl;
         of.setf(ios::scientific, ios::floatfield);
         of.precision(6);
         for (int i = 0; i < (int)num_points_output.size(); ++i) {
@@ -424,10 +426,10 @@ void saveTimeCostFile()
     ofstream of(time_cost_file);
     if (of.is_open())
     {
-        of << "points lambda_std(1) lambda_incre(1) normal_center_std(1) normal_center_incre(1)\n";
+        of << "points lambda_BALM lambda_LUFA normal_center_BALM normal_center_LUFA\n";
         of.setf(ios::scientific, ios::floatfield);
         of.precision(6);
-        of<< num_points_output[0] << endl;
+//        of<< num_points_output[0] << endl;
         for (int i = 1; i < (int)num_points_output.size(); ++i) {
             int t = i - 1;
             of<< num_points_output[i] << " "
