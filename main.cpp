@@ -429,7 +429,11 @@ void saveTimeCostFile()
         of << "points lambda_BALM lambda_LUFA normal_center_BALM normal_center_LUFA\n";
         of.setf(ios::scientific, ios::floatfield);
         of.precision(6);
-//        of<< num_points_output[0] << endl;
+
+        of<< num_points_output[0] << " "
+          << lambda_cov_time_std[0] << " " << lambda_cov_time_incre[0] << " "
+          << nq_cov_time_std[0] << " " << nq_cov_time_incre[0] << endl;
+
         for (int i = 1; i < (int)num_points_output.size(); ++i) {
             int t = i - 1;
             of<< num_points_output[i] << " "
@@ -691,7 +695,7 @@ int main(int argc, char** argv) {
                 {
                     JacobianLambda(points_new, eigen_vec_new, center_new, Jpi_new);
                     calcLambdaCov(points_cov_new, Jpi_new, lambda_cov_incre);
-                    points_size_nqcov = i;
+                    points_size_nqcov = i + 1;
                     calc_std_form = true;
                     printf("******reach max incremental interval.******\n");
                     printf("******compute lambda cov in std form******\n");
@@ -766,6 +770,7 @@ int main(int argc, char** argv) {
                     nq_cov_time_incre.push_back(t_incre1 + t_es_ + time_nc);
                     printf("******reach max incremental interval.******\n");
                     printf("******compute normal, center cov in std form******\n");
+                    printf("ES: %fms Normal Cov: %fms\n", t_es_, + time_nc);
                 }
                 else
                 {

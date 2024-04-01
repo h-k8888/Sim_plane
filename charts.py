@@ -14,6 +14,8 @@ fig_size = (9, 3)
 fig_size_2_1 = (9, 5)
 fig_alpha = 0.6
 l_width = 2
+
+
 def loadData(flieName):
     inFile = open(flieName, 'r')
 
@@ -38,8 +40,10 @@ def loadData(flieName):
             # , intensityIncidentCorrected, intensityDistanceCorrected
             )
 
+
 def sci_format(x, pos):
     return "{:e}".format(x)
+
 
 def make_chart(x, y, s):
     plt.plot(x, y, s)
@@ -51,6 +55,137 @@ def make_chart(x, y, s):
     # plt.show()
 
 
+def make_time_chart_lambda(time_data):
+    num_points = time_data['points']
+    lambda_balm = time_data['lambda_BALM']
+    lambda_balm_min = min(lambda_balm)
+    lambda_balm_max = max(lambda_balm)
+
+    lambda_lufa = time_data['lambda_LUFA']
+    lambda_lufa_min = min(lambda_lufa)
+    lambda_lufa_max = max(lambda_lufa)
+    plt.figure(figsize=fig_size)
+    text_size = 14
+    # plt.title('Time consumption for eigenvalue covariance calculation', fontsize=text_size)
+    # fig, axs = plt.subplots(nrows=2, ncols=1, figsize=(8, 5), constrained_layout=True)
+    # axs[0].set_title('eigenvalues covariance', fontsize=14)
+    plt.plot(num_points, lambda_balm, label='BALM', alpha=fig_alpha, linewidth=l_width, color='red')
+    plt.plot(num_points, lambda_lufa, label='LUFA', alpha=fig_alpha, linewidth=l_width, color='green')
+
+    y_max = max(lambda_lufa_max, lambda_balm_max)
+    y_min = min(lambda_balm_min, lambda_lufa_min)
+    lambda_inteval = (y_max - y_min) / 5.0
+    y_ticks = np.arange(y_min, y_max + lambda_inteval, lambda_inteval)
+    plt.yticks(y_ticks)
+    x_ticks = np.arange(min(num_points), max(num_points) + 100, 100)
+    plt.xticks(x_ticks)
+
+    plt.xlabel('points', fontsize=text_size)
+    plt.ylabel('time consumption', fontsize=text_size)
+
+    # l1_label = plt.gca().get_ylabel()
+    plt.legend(fontsize=text_size + 2)
+    plt.ticklabel_format(axis='y', style='sci', scilimits=(0, 3))
+    # plt.gca().xaxis.set_major_formatter(FuncFormatter(sci_format))
+    # plt.gca().yaxis.set_major_formatter(FuncFormatter(sci_format))
+    plt.grid(True)
+    plt.autoscale(enable=True, axis='x', tight=True)
+    plt.tight_layout()
+    plt.show()
+
+
+
+def make_time_chart_nq(time_data):
+    num_points = time_data['points']
+    lambda_balm = time_data['normal_center_BALM']
+    lambda_balm_min = min(lambda_balm)
+    lambda_balm_max = max(lambda_balm)
+
+    lambda_lufa = time_data['normal_center_LUFA']
+    lambda_lufa_min = min(lambda_lufa)
+    lambda_lufa_max = max(lambda_lufa)
+    plt.figure(figsize=fig_size)
+    text_size = 14
+    # plt.title(r'Time consumption for $\mathbf{n}, \mathbf{m}$ covariance calculation', fontsize=text_size)
+    # fig, axs = plt.subplots(nrows=2, ncols=1, figsize=(8, 5), constrained_layout=True)
+    # axs[0].set_title('eigenvalues covariance', fontsize=14)
+    plt.plot(num_points, lambda_balm, label='BALM', alpha=fig_alpha, linewidth=l_width, color='red')
+    plt.plot(num_points, lambda_lufa, label='LUFA', alpha=fig_alpha, linewidth=l_width, color='green')
+
+    y_max = max(lambda_lufa_max, lambda_balm_max)
+    y_min = min(lambda_balm_min, lambda_lufa_min)
+    lambda_inteval = (y_max - y_min) / 5.0
+    y_ticks = np.arange(y_min, y_max + lambda_inteval, lambda_inteval)
+    plt.yticks(y_ticks)
+    x_ticks = np.arange(min(num_points), max(num_points) + 100, 100)
+    plt.xticks(x_ticks)
+
+    plt.xlabel('points', fontsize=text_size)
+    plt.ylabel('time consumption', fontsize=text_size)
+
+    # l1_label = plt.gca().get_ylabel()
+    plt.legend(fontsize=text_size + 2)
+    plt.ticklabel_format(axis='y', style='sci', scilimits=(0, 3))
+    # plt.gca().xaxis.set_major_formatter(FuncFormatter(sci_format))
+    # plt.gca().yaxis.set_major_formatter(FuncFormatter(sci_format))
+    plt.grid(True)
+    plt.autoscale(enable=True, axis='x', tight=True)
+    plt.tight_layout()
+    plt.show()
+
+
+
+def make_time_chart_all(time_data):
+    num_points = time_data['points']
+    lambda_balm = time_data['lambda_BALM']
+    lambda_balm_min = min(lambda_balm)
+    lambda_balm_max = max(lambda_balm)
+    nq_balm = time_data['normal_center_BALM']
+    nq_balm_min = min(nq_balm)
+    nq_balm_max = max(nq_balm)
+
+    lambda_lufa = time_data['lambda_LUFA']
+    lambda_lufa_min = min(lambda_lufa)
+    lambda_lufa_max = max(lambda_lufa)
+    nq_lufa = time_data['normal_center_LUFA']
+    nq_lufa_min = min(nq_lufa)
+    nq_lufa_max = max(nq_lufa)
+
+
+
+    plt.figure(figsize=fig_size)
+    text_size = 14
+    # plt.title('Time consumption for covariance calculation', fontsize=text_size)
+    # fig, axs = plt.subplots(nrows=2, ncols=1, figsize=(8, 5), constrained_layout=True)
+    # axs[0].set_title('eigenvalues covariance', fontsize=14)
+    plt.plot(num_points, lambda_balm, label=r'$\lambda$_BALM', alpha=fig_alpha, linewidth=l_width, color='red')
+    plt.plot(num_points, nq_balm, label=r'$\mathbf{n}, \mathbf{m}$_BALM', alpha=fig_alpha, linewidth=l_width)
+    plt.plot(num_points, nq_lufa, label=r'$\mathbf{n}, \mathbf{m}$_LUFA', alpha=fig_alpha+0.1, linewidth=l_width+1)
+    plt.plot(num_points, lambda_lufa, label=r'$\lambda$_LUFA', alpha=fig_alpha, linewidth=l_width, color='green')
+
+    y_max = max(lambda_lufa_max, lambda_balm_max, nq_balm_max, nq_lufa_max)
+    y_min = min(lambda_balm_min, lambda_lufa_min, nq_balm_min, nq_lufa_min)
+    lambda_inteval = (y_max - y_min) / 5.0
+    y_ticks = np.arange(y_min, y_max + lambda_inteval, lambda_inteval)
+    plt.yticks(y_ticks)
+    x_ticks = np.arange(min(num_points), max(num_points) + 100, 100)
+    plt.xticks(x_ticks)
+
+    plt.xlabel('points', fontsize=text_size)
+    plt.ylabel('time consumption', fontsize=text_size)
+
+    # l1_label = plt.gca().get_ylabel()
+    plt.legend(fontsize=text_size - 1)
+    plt.ticklabel_format(axis='y', style='sci', scilimits=(0, 3))
+    # plt.gca().xaxis.set_major_formatter(FuncFormatter(sci_format))
+    # plt.gca().yaxis.set_major_formatter(FuncFormatter(sci_format))
+    plt.grid(True)
+    plt.autoscale(enable=True, axis='x', tight=True)
+    plt.tight_layout()
+    plt.show()
+
+
+
 def make_eigen1_chart(eigen_data):
     num_points = eigen_data['points']
     lambda_1_balm = eigen_data['normal_cov_trace_BALM']
@@ -58,26 +193,28 @@ def make_eigen1_chart(eigen_data):
     lambda_1_max = max(lambda_1_balm)
     plt.figure(figsize=fig_size)
     text_size = 14
-    plt.title(r'$\mathbf{v}_1$ covariance trace', fontsize=text_size)
+    # plt.title(r'$\mathbf{v}_1$ covariance trace', fontsize=text_size)
     # fig, axs = plt.subplots(nrows=2, ncols=1, figsize=(8, 5), constrained_layout=True)
     # axs[0].set_title('eigenvalues covariance', fontsize=14)
     plt.plot(num_points, lambda_1_balm, label='BALM', alpha=fig_alpha, linewidth=l_width, color='red')
-    plt.plot(num_points, eigen_data['normal_cov_trace_LUFA'], label='LUFA', alpha=fig_alpha, linewidth=l_width, color='green')
+    plt.plot(num_points, eigen_data['normal_cov_trace_LUFA'], label='LUFA', alpha=fig_alpha, linewidth=l_width,
+             color='green')
     lambda_inteval = (lambda_1_max - lambda_1_min) / 5.0
     y_ticks = np.arange(lambda_1_min, lambda_1_max + lambda_inteval, lambda_inteval)
     plt.yticks(y_ticks)
-    x_ticks = np.arange(min(num_points), max(num_points)+100, 100)
+    x_ticks = np.arange(min(num_points), max(num_points) + 100, 100)
     plt.xticks(x_ticks)
 
     plt.xlabel('points', fontsize=text_size)
     plt.ylabel('value', fontsize=text_size)
+
     # l1_label = plt.gca().get_ylabel()
-    plt.legend(fontsize=text_size+2)
-    plt.ticklabel_format(axis='y', style='sci', scilimits=(0,3))
+    plt.legend(fontsize=text_size + 2)
+    plt.ticklabel_format(axis='y', style='sci', scilimits=(0, 3))
     # plt.gca().xaxis.set_major_formatter(FuncFormatter(sci_format))
     # plt.gca().yaxis.set_major_formatter(FuncFormatter(sci_format))
     plt.grid(True)
-    plt.autoscale(enable = True, axis='x', tight=True)
+    plt.autoscale(enable=True, axis='x', tight=True)
     plt.tight_layout()
     plt.show()
 
@@ -89,7 +226,7 @@ def make_lambda1_chart(lambda_data):
     lambda_1_max = max(lambda_1_balm)
     plt.figure(figsize=fig_size)
     text_size = 14
-    plt.title(r'$\lambda_1$ covariance', fontsize=text_size)
+    # plt.title(r'$\lambda_1$ covariance', fontsize=text_size)
     # fig, axs = plt.subplots(nrows=2, ncols=1, figsize=(8, 5), constrained_layout=True)
     # axs[0].set_title('eigenvalues covariance', fontsize=14)
     plt.plot(num_points, lambda_1_balm, label='BALM', alpha=fig_alpha, linewidth=l_width, color='red')
@@ -97,15 +234,15 @@ def make_lambda1_chart(lambda_data):
     lambda_inteval = (lambda_1_max - lambda_1_min) / 5.0
     y_ticks = np.arange(lambda_1_min, lambda_1_max + lambda_inteval, lambda_inteval)
     plt.yticks(y_ticks)
-    x_ticks = np.arange(min(num_points), max(num_points)+100, 100)
+    x_ticks = np.arange(min(num_points), max(num_points) + 100, 100)
     plt.xticks(x_ticks)
 
     plt.xlabel('points', fontsize=text_size)
     plt.ylabel('value', fontsize=text_size)
     # l1_label = plt.gca().get_ylabel()
-    plt.legend(fontsize=text_size+2)
+    plt.legend(fontsize=text_size + 2)
     plt.grid(True)
-    plt.autoscale(enable = True, axis='x', tight=True)
+    plt.autoscale(enable=True, axis='x', tight=True)
     plt.tight_layout()
     plt.show()
 
@@ -117,9 +254,11 @@ def make_lambda_chart_all(lambda_data):
     lambda_1_max = max(lambda_1_balm)
     # plt.title('eigenvalues covariance', fontsize=14)
     fig, axs = plt.subplots(nrows=2, ncols=1, figsize=fig_size_2_1, constrained_layout=True)
-    axs[0].set_title('eigenvalues covariance', fontsize=14)
-    axs[0].plot(num_points, lambda_1_balm, color='magenta', label=r'$\lambda_1$_BALM', alpha=fig_alpha, linewidth=l_width)
-    axs[0].plot(num_points, lambda_data['lambda_1_LUFA'], color='green', label=r'$\lambda_1$_LUFA', alpha=fig_alpha, linewidth=l_width)
+    # axs[0].set_title('eigenvalues covariance', fontsize=14)
+    axs[0].plot(num_points, lambda_1_balm, color='magenta', label=r'$\lambda_1$_BALM', alpha=fig_alpha,
+                linewidth=l_width)
+    axs[0].plot(num_points, lambda_data['lambda_1_LUFA'], color='green', label=r'$\lambda_1$_LUFA', alpha=fig_alpha,
+                linewidth=l_width)
     # axs[0].title('eigenvalues covariance', fontsize=14)
     axs[0].set_xlabel('points', fontsize=10)
     axs[0].set_ylabel(r'$\lambda_1$ value', fontsize=10)
@@ -129,7 +268,6 @@ def make_lambda_chart_all(lambda_data):
     axs[0].legend(fontsize=12)
     axs[0].grid(True)
     # plt.show()
-
 
     # plt.twinx()
 
@@ -149,12 +287,12 @@ def make_lambda_chart_all(lambda_data):
     lambda_min = min(lambda_2_min, lambda_3_min)
     lambda_max = max(lambda_2_max, lambda_3_max)
     l23_label = plt.gca().get_ylabel()
-    x_ticks = np.arange(min(num_points), max(num_points)+100, 100)
+    x_ticks = np.arange(min(num_points), max(num_points) + 100, 100)
     # axs[1].xticks(x_ticks)
-    lambda_inteval = (lambda_max -lambda_min) / 5.0
+    lambda_inteval = (lambda_max - lambda_min) / 5.0
     y_ticks = np.arange(lambda_min, lambda_max + lambda_inteval, lambda_inteval)
     # axs[1].yticks(y_ticks)
-    axs[1].autoscale(enable = True, axis='y', tight=False)
+    axs[1].autoscale(enable=True, axis='y', tight=False)
 
     # lines, labels = plt.gca().get_legend_handles_labels()
     # first_legend = plt.legend(lines[:2], labels[:2], loc='upper left')
@@ -193,11 +331,14 @@ if __name__ == '__main__':
     n_q_data = read_txt_data(normal_center_cov_file)
     time_cost_data = read_txt_data(time_cost_file)
 
-    # print(lambda_data)
+    # # print(lambda_data)
     make_lambda_chart_all(lambda_data)
     make_lambda1_chart(lambda_data)
-    print(lambda_data['points'])
+    # print(lambda_data['points'])
     make_eigen1_chart(n_q_data)
+    make_time_chart_lambda(time_cost_data)
+    make_time_chart_nq(time_cost_data)
+    make_time_chart_all(time_cost_data)
     # print_intensity(theta, intensity, 'g^')
     # print_intensity(theta, intensityCorrected, 'bs')
     # # # print_intensity(distance, intensity, 'g^')
